@@ -5,7 +5,7 @@ if (!isset($g_external_is_connector))
 	require_once('./cfg/_cfg.php');
 }
 // Define a class to represent the race data
-class Race {
+class RaceInfo {
 	public $ext_id;
 	public $datum;
 	public $datum2;
@@ -54,10 +54,72 @@ class Race {
 	}
 }
 
+class RacePayement {
+    public int $raceId;
+    public RaceOverview $overview;
+    /** @var array<int, RaceParticipant> RegNo => User */
+    public array $participants = [];
+
+    public function __construct(int $raceId) {
+        $this->raceId = $raceId;
+        $this->overview = new RaceOverview();
+    }
+
+    public function addPatricipant(RaceParticipant $user): void {
+        $this->participants[$user->regNo] = $user;
+    }
+
+	public function addCategory(string $name, int $termin, $fee ): void {
+		$this->overview->addCategory($name,$termin,$fee);
+	}
+}
+
+class RaceOverview {
+    /** @var array<string, array<int, float>> Category => [EntryStop => Fee] */
+    public array $categories = [];
+
+    /** @var array<string, float> ServiceName => Fee */
+    public array $services = [];
+
+    public function addCategory(string $name, int $termin, $fee ): void {
+
+		if (!isset($this->categories[$name])) {
+			$this->categories[$name] = [];
+		}
+		$this->categories[$name][$termin] = $fee;
+    }
+
+    public function addService(string $name, float $fee): void {
+        $this->services[$name] = $fee;
+    }
+}
+
+class RaceParticipant {
+    public string $regNo;
+    public string $classDesc;
+    public string $name;
+    public bool $rentSI;
+    public string $licence;
+	public $fee;
+	public int $termin;
+
+    public function __construct(string $regNo, string $classDesc, string $name, bool $rentSI, string $licence, $fee, int $termin) {
+        $this->regNo = $regNo;
+        $this->classDesc = $classDesc;
+        $this->name = $name;
+        $this->rentSI = $rentSI;
+        $this->licence = $licence;
+		$this->fee = $fee;
+		$this->termin = $termin;
+    }
+}
+
 interface ConnectorInterface {
 	public function getSystemName(): string;
 	public function getRaceURL(string $id): string;
-	public function getRaceInfo(string $id);
+	public function getRaceInfo(string $id) : ?RaceInfo;
+	public function getRacesList($fromDate, $toDate);
+	public function getRacePayement(string $id) : ?RacePayement;
 }
 
 class OrisCZConnector implements ConnectorInterface {
@@ -74,7 +136,7 @@ class OrisCZConnector implements ConnectorInterface {
 		return "Oris";
 	}
 
-	// Race URL
+	// RaceInfo URL
 	public function getRaceURL($raceId) : string {
 		return $this->sourceUrl . 'Zavod?id=' . $raceId;
 	}
@@ -131,7 +193,7 @@ class OrisCZConnector implements ConnectorInterface {
 	}
 
 	// Method to get detailed race information based on race ID
-	public function getRaceInfo($raceId) {
+	public function getRaceInfo($raceId) : RaceInfo {
 		$url = $this->apiUrl . '?format=json&method=getEvent&id=' . $raceId;
 
 		$response = $this->makeRequest($url);
@@ -155,7 +217,7 @@ class OrisCZConnector implements ConnectorInterface {
 			// Get last Stage date if multistage event
 			$date2 = ($raceData['Stages'] > 1) ? $this->getRaceDate($raceData['Stage'.$raceData['Stages']]) : 0;
 			// Use associative array to pass data to constructor
-			return new Race([
+			return new RaceInfo([
 				'ext_id' => $raceData['ID'],
 				'datum' => String2DateDMY(formatDate($raceData['Date'])),
 				'datum2' => $date2,
@@ -235,6 +297,38 @@ class OrisCZConnector implements ConnectorInterface {
 		} else {
 			return null; // Return null if race not found or error
 		}
+	}
+
+	// Method to get detailed race information based on race ID
+	public function getRacePayement($raceId) : ?RacePayement {
+
+		global $g_external_is_club_id;
+
+		if ( !IsSet ($g_external_is_club_id) || $g_external_is_club_id === '' ) return null;
+
+		$url = $this->apiUrl . '?format=json&method=getEventEntries&clubid=' . $g_external_is_club_id . '&eventid=' . $raceId;
+
+		$response = $this->makeRequest($url);
+
+		if ($response && $response['Status'] == "OK") {
+			$racePayement = new RacePayement($raceId);
+
+			foreach ($response['Data'] as $entry) {
+				if (isset($entry['Fee'])) {
+					if (isset($entry['RegNo']) ) {
+						$racePayement->addPatricipant(
+							new RaceParticipant($entry['RegNo'], $entry['ClassDesc'], $entry['Name'],
+							 $entry['RentSI'], $entry['Licence'], $entry['Fee'], $entry['EntryStop']));
+					}
+					if (isset($entry['ClassDesc'])&&isset($entry['ClassDesc'])) {
+						$racePayement->addCategory($entry['ClassDesc'], $entry['EntryStop'], $entry['Fee']);
+					}
+				}
+			}
+			return $racePayement;
+		}
+
+		return null;
 	}
 }
 

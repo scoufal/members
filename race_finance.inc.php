@@ -52,6 +52,27 @@ RaceInfoTable($zaznam_z,'',false,false,true);
 
 require_once ('./url.inc.php');
 
+// informace z is
+require_once ("./connectors.php");
+// need to be defined for all races
+
+$ext_id = $zaznam_z['ext_id'];
+$connector = ConnectorFactory::create();
+
+if ( !empty ( $ext_id ) && $connector!== null ) {
+
+    // Get race info by race ID
+    $racePayement = $connector->getRacePayement($ext_id);
+    if ( $racePayement == null ) {
+		$racePayement = new RacePayement(0);
+		$ext_id_info = " \u{26A0} neplatné ID závodu";
+	}
+} else {
+	$racePayement = new RacePayement(0);
+}
+print_r ($racePayement->overview);
+print_r ($racePayement->participants);
+
 require_once ('./common_fin.inc.php');
 $enable_fin_types = IsFinanceTypeTblFilled();
 

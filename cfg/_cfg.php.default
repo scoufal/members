@@ -105,6 +105,9 @@ $g_race_accommodation_default = 1;
 
 // Externi informacni system - podporovane hodnoty 'OrisCZConnector' a ''
 $g_external_is_connector = 'OrisCZConnector';
+// Identifikator oddilu v informacnim systemu
+$g_external_is_club_id = '';
+
 
 $g_custom_entry_list_text = '';
 
