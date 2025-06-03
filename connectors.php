@@ -69,8 +69,8 @@ class RacePayement {
         $this->participants[$user->regNo] = $user;
     }
 
-	public function addCategory(string $name, int $termin, $fee ): void {
-		$this->overview->addCategory($name,$termin,$fee);
+	public function addCategory(string $name, int $feeTier, $fee ): void {
+		$this->overview->addCategory($name,$feeTier,$fee);
 	}
 }
 
@@ -81,12 +81,18 @@ class RaceOverview {
     /** @var array<string, float> ServiceName => Fee */
     public array $services = [];
 
-    public function addCategory(string $name, int $termin, $fee ): void {
+    /** @var array<int, bool> feeTier => exist */
+    public array $feeTiers = [];
+
+    public function addCategory(string $name, int $feeTier, $fee ): void {
 
 		if (!isset($this->categories[$name])) {
 			$this->categories[$name] = [];
 		}
-		$this->categories[$name][$termin] = $fee;
+		$this->categories[$name][$feeTier] = $fee;
+
+		// Store only unique sorted feeTier values
+    	$this->feeTiers[$feeTier] = true;
     }
 
     public function addService(string $name, float $fee): void {
@@ -101,16 +107,16 @@ class RaceParticipant {
     public bool $rentSI;
     public string $licence;
 	public $fee;
-	public int $termin;
+	public int $feeTier;
 
-    public function __construct(string $regNo, string $classDesc, string $name, bool $rentSI, string $licence, $fee, int $termin) {
+    public function __construct(string $regNo, string $classDesc, string $name, bool $rentSI, string $licence, $fee, int $feeTier) {
         $this->regNo = $regNo;
         $this->classDesc = $classDesc;
         $this->name = $name;
         $this->rentSI = $rentSI;
         $this->licence = $licence;
 		$this->fee = $fee;
-		$this->termin = $termin;
+		$this->feeTier = $feeTier;
     }
 }
 

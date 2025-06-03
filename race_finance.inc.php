@@ -2,7 +2,7 @@
 <?php /* finance -  show exact race finance */
 
 $query_prihlaseni = "
-select u.id u_id, u.sort_name, f.id, f.amount, f.note, zu.kat, zu.transport, zu.ubytovani, ft.nazev, zu.participated, zu.add_by_fin from ".TBL_USER." u inner join
+select u.id u_id, u.sort_name, u.reg reg, f.id, f.amount, f.note, zu.kat, zu.transport, zu.ubytovani, ft.nazev, zu.participated, zu.add_by_fin from ".TBL_USER." u inner join
 ".TBL_ZAVXUS." zu on u.id = zu.id_user left join
 (select * from ".TBL_FINANCE." where id_zavod = $race_id and storno is null) f on f.id_users_user = zu.id_user
 left join ".TBL_FINANCE_TYPES." ft on ft.id = u.finance_type
@@ -11,7 +11,7 @@ where zu.id_zavod = $race_id and u.hidden = '0' order by u.sort_name
 $vysledek_prihlaseni = query_db($query_prihlaseni);
 
 $query_platici = "
-select u.id u_id, u.sort_name, f.id, f.amount, f.note, null kat, ft.nazev from ".TBL_USER." u inner join
+select u.id u_id, u.sort_name, u.reg reg, f.id, f.amount, f.note, null kat, ft.nazev from ".TBL_USER." u inner join
 (select * from ".TBL_FINANCE." where id_zavod = $race_id and storno is null) f on f.id_users_user = u.id 
 left join ".TBL_FINANCE_TYPES." ft on ft.id = u.finance_type
 where f.id_zavod = $race_id
@@ -22,7 +22,7 @@ order by u.sort_name
 $vysledek_platici = query_db($query_platici);
 
 $query_neprihlaseni = "
-select u.id u_id, u.sort_name, null id, null amount, null note, null kat, ft.nazev from ".TBL_USER." u 
+select u.id u_id, u.sort_name, u.reg reg, null id, null amount, null note, null kat, ft.nazev from ".TBL_USER." u 
 left join ".TBL_FINANCE_TYPES." ft on ft.id = u.finance_type
 where u.id not in 
 (SELECT distinct(f.id_users_user) id
@@ -65,13 +65,51 @@ if ( !empty ( $ext_id ) && $connector!== null ) {
     $racePayement = $connector->getRacePayement($ext_id);
     if ( $racePayement == null ) {
 		$racePayement = new RacePayement(0);
-		$ext_id_info = " \u{26A0} neplatné ID závodu";
+		echo " \u{26A0} neplatné ID závodu";
+	} else {
+
+		// Sort categories alphabetically
+		ksort($racePayement->overview->categories);
+
+		// // Add collapsible section for category counts with table formatting
+		// echo '<br><br><div id="category_details" style="display:none;">';
+		echo '<table cellspacing="5">';
+		echo '<tr><th style="text-align:left;">Kategorie</th>';
+
+		foreach ($racePayement->overview->categories as $category => $fees) {
+			echo "<td>$category</td>";
+		}
+
+		echo '</tr><tr><th style="text-align:left;">Platba</th>';
+
+		foreach ($racePayement->overview->categories as $category => $fees) {
+			echo "<td style='text-align:center;'>";
+			foreach ( $racePayement->overview->feeTiers as $tier => $exist ) {
+				echo ( $fees[$tier] ?? '-' ) . '<br/>';
+			}
+			echo "</td>";
+		}
+
+		echo "</tr></table></div>";
 	}
 } else {
 	$racePayement = new RacePayement(0);
 }
-print_r ($racePayement->overview);
-print_r ($racePayement->participants);
+
+function getOrisFee($reg) : string {
+	global $g_shortcut;
+	global $racePayement;
+	if ( isset ($racePayement->participants[$g_shortcut.RegNumToStr($reg)]) ) {
+		$participant = $racePayement->participants[$g_shortcut.RegNumToStr($reg)];
+		$fee = $participant->fee;
+		if ( $participant->feeTier > 1 ) {
+			$fee = '<span class="TextAlert">'.$fee . '/' . $participant->feeTier .'</span>'; 
+		}
+		return $fee;
+	}
+	return '';
+}
+
 
 require_once ('./common_fin.inc.php');
 $enable_fin_types = IsFinanceTypeTblFilled();
@@ -119,6 +157,7 @@ DrawPageSubTitle('Závodníci v závodě');
 $data_tbl = new html_table_mc();
 $col = 0;
 $data_tbl->set_header_col($col++,'Jméno',ALIGN_LEFT);
+$data_tbl->set_header_col($col++,'Oris',ALIGN_LEFT);
 $data_tbl->set_header_col($col++,'Částka',ALIGN_LEFT);
 $data_tbl->set_header_col($col++,'Poznámka',ALIGN_LEFT);
 $data_tbl->set_header_col($col++,'Kategorie',ALIGN_CENTER);
@@ -154,6 +193,8 @@ while ($zaznam=mysqli_fetch_assoc($vysledek_prihlaseni))
 	$row = array();
 	$row[] = "<A href=\"javascript:open_win_ex('./view_address.php?id=".$zaznam["u_id"]."','',500,540)\" class=\"adr_name\">".$zaznam['sort_name']."</A>";
 	
+	$row[] = getOrisFee($zaznam['reg']);
+
 	$amount = $zaznam['amount'];
 	$amount>0?$sum_plus_amount+=$amount:$sum_minus_amount+=$amount;
 	
@@ -202,6 +243,8 @@ while ($zaznam=mysqli_fetch_assoc($vysledek_platici))
 	$row = array();
 	$row[] = "<A href=\"javascript:open_win('./view_address.php?id=".$zaznam["u_id"]."','')\" class=\"adr_name\">".$zaznam['sort_name']."</A>";
 
+	$row[] = getOrisFee($zaznam['reg']);
+
 	$amount = $zaznam['amount'];
 	$amount>0?$sum_plus_amount+=$amount:$sum_minus_amount+=$amount;
 	
@@ -242,6 +285,7 @@ DrawPageSubTitle('Ostatní závodníci');
 $data_tbl = new html_table_mc();
 $col = 0;
 $data_tbl->set_header_col($col++,'Jméno',ALIGN_LEFT);
+$data_tbl->set_header_col($col++,'Oris',ALIGN_LEFT);
 $data_tbl->set_header_col($col++,'Částka',ALIGN_LEFT);
 $data_tbl->set_header_col($col++,'Poznámka',ALIGN_LEFT);
 $data_tbl->set_header_col($col++,'Kategorie',ALIGN_CENTER);
@@ -262,6 +306,8 @@ while ($zaznam=mysqli_fetch_assoc($vysledek_neprihlaseni))
 	$row = array();
 	$row[] = "<A href=\"javascript:open_win('./view_address.php?id=".$zaznam["u_id"]."','')\" class=\"adr_name\">".$zaznam['sort_name']."</A>";
 	
+	$row[] = getOrisFee($zaznam['reg']);
+
 	$amount = $zaznam['amount'];
 	$input_amount = '<input type="number" id="am'.$i.'" name="am'.$i.'" value="'.$amount.'" size="5" maxlength="10" />';
 	$row[] = $input_amount;
