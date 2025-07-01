@@ -7,7 +7,7 @@
 		where fin.id_users_user = ".$user_id." and fin.storno is null order by fin.date desc, fin.id desc");
 
 //vytazeni jmena uzivatele a typu prispevku
-$vysledek_user_name=query_db("select us.sort_name name, ft.nazev ft_nazev from ".TBL_USER." us LEFT JOIN ".TBL_FINANCE_TYPES." ft ON us.finance_type = ft.id where us.id = ".$user_id);
+$vysledek_user_name=query_db("select us.sort_name name, us.reg, ft.nazev ft_nazev from ".TBL_USER." us LEFT JOIN ".TBL_FINANCE_TYPES." ft ON us.finance_type = ft.id where us.id = ".$user_id);
 $zaznam_user_name=mysqli_fetch_array($vysledek_user_name);
 
 DrawPageSubTitle('Historie účtu pro člena: '.$zaznam_user_name['name']);
@@ -15,6 +15,13 @@ DrawPageSubTitle('Historie účtu pro člena: '.$zaznam_user_name['name']);
 if ($zaznam_user_name['ft_nazev'] != null)
 {
 	DrawPageSubTitle('Typ oddílového příspěvku člena: '.$zaznam_user_name['ft_nazev']);
+}
+
+if (!empty($g_finance_payement_info)) {
+    $msg = strtr($g_finance_payement_info, [
+        '{reg}' => $zaznam_user_name['reg']
+    ]);
+    echo '<div style="text-align: left;">' . htmlspecialchars($msg) . '</div>';
 }
 
 require_once ("./common_race.inc.php");

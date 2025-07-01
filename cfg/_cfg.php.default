@@ -96,6 +96,11 @@ $g_color_profile = '_colors_black_blue.php';
 $g_enable_finances = true;
 $g_enable_finances_claim = true;
 $g_finances_race_list_sort_old = false;
+// Dodatečná informace k platbě příspěvků. Zobrazena na stránce uživatelových financí.
+// Text {reg} bude nahrazen registračním číslem užívatele.
+// např.: 'Číslo oddílového účtu: 4067843369/5500 VS: {reg}'
+$g_finance_payement_info = '';
+
 
 // doprava & ubytovani 
 $g_enable_race_transport = true;
