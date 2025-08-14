@@ -72,13 +72,17 @@ class RacePayement {
 	public function addCategory(string $name, int $feeTier, $fee ): void {
 		$this->overview->addCategory($name,$feeTier,$fee);
 	}
+
+	public function addService(string $name, $fee, $count ): void {
+		$this->overview->addService( $name, $fee, $count );
+	}
 }
 
 class RaceOverview {
     /** @var array<string, array<int, float>> Category => [EntryStop => Fee] */
     public array $categories = [];
 
-    /** @var array<string, float> ServiceName => Fee */
+    /** @var array<string, array<float,int>> ServiceName => [ Fee => Count ]  */
     public array $services = [];
 
     /** @var array<int, bool> feeTier => exist */
@@ -95,8 +99,12 @@ class RaceOverview {
     	$this->feeTiers[$feeTier] = true;
     }
 
-    public function addService(string $name, float $fee): void {
-        $this->services[$name] = $fee;
+    public function addService(string $name, $fee, $count ): void {
+		if ( isset ( $this->services[$name][$fee] ) ) {
+        	$this->services[$name][$fee] += $count;
+		} else {
+        	$this->services[$name][$fee] = $count;
+		}
     }
 }
 
@@ -109,12 +117,12 @@ class RaceParticipant {
 	public $fee;
 	public int $feeTier;
 
-    public function __construct(string $regNo, string $classDesc, string $name, bool $rentSI, string $licence, $fee, int $feeTier) {
+    public function __construct(string $regNo, string $classDesc, string $name, bool $rentSI, string|null $licence, $fee, int $feeTier) {
         $this->regNo = $regNo;
         $this->classDesc = $classDesc;
         $this->name = $name;
         $this->rentSI = $rentSI;
-        $this->licence = $licence;
+        $this->licence = $licence ?? '';
 		$this->fee = $fee;
 		$this->feeTier = $feeTier;
     }
@@ -311,10 +319,11 @@ class OrisCZConnector implements ConnectorInterface {
 		global $g_external_is_club_id;
 
 		if ( !IsSet ($g_external_is_club_id) || $g_external_is_club_id === '' ) return null;
-
+		
 		$url = $this->apiUrl . '?format=json&method=getEventEntries&clubid=' . $g_external_is_club_id . '&eventid=' . $raceId;
 
 		$response = $this->makeRequest($url);
+		$racePayement = null;
 
 		if ($response && $response['Status'] == "OK") {
 			$racePayement = new RacePayement($raceId);
@@ -331,10 +340,28 @@ class OrisCZConnector implements ConnectorInterface {
 					}
 				}
 			}
-			return $racePayement;
 		}
 
-		return null;
+		$url = $this->apiUrl . '?format=json&method=getEventServiceEntries&clubid=' . $g_external_is_club_id . '&eventid=' . $raceId;
+
+		$response = $this->makeRequest($url);
+
+		if ($response && $response['Status'] == "OK") {
+			if ( $racePayement ===  null ) $racePayement = new RacePayement($raceId);
+			foreach ($response['Data'] as $entry) {
+				if ( isset ( $entry['Service'] ) ) {
+					$racePayement->addService($entry['Service']['NameCZ'] ?? 'Name?', $entry['Service']['UnitPrice'] , $entry['Quantity'] );
+				} else {
+					if ( isset ( $entry['Quantity'] ) && isset ( $entry['TotalFee'] ) ) {
+						$racePayement->addService('Name?', $entry['TotalFee'] / $entry['Quantity'], $entry['Quantity'] );
+					}
+				}
+			}
+		}
+
+		print_r ($racePayement);
+
+		return $racePayement;
 	}
 }
 

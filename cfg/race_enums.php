@@ -38,6 +38,13 @@ $g_racetype0 = [
 $g_racetype0_idx = array_keys($g_racetype0);
 $g_racetype0_cnt = count($g_racetype0_idx);
 
+// Typy plateb
+$g_payement_type = [
+	'N' => 'navíc',
+	'P' => 'poměr',
+	'R' => 'rozdíl',
+];
+
 // Volby pro sdilenou dopravu
 $g_sedadel_cnt = [
 	null => "nejedu",
