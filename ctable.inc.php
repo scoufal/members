@@ -275,7 +275,23 @@ class html_table_mc extends html_table_base
 			$rc = 'highlight';
 		else
 			$rc= ((++$this->row_idx % 2) == 0) ? 'r1' : 'r2';
-		$row = '<TR class="'.$rc.' '.$row_class.'" valign="top">';
+		// compatible with class and attribute list parameter
+		$row_add_class = '';
+		$row_add_attrs = '';
+		if (is_string($row_class)) {
+			$row_add_class = ' ' . $row_class;
+		} elseif ( is_array($row_class) ) {
+			foreach ($row_class as $key => $value) {
+				if ( $key === 'class')
+					$row_add_class = ' ' . $value;
+				else {
+					if (!empty($key) && isset($value) && $value !== '') {
+						$row_add_attrs .= ' ' . htmlspecialchars($key) . '="' . htmlspecialchars($value) . '"';
+					}
+				}
+			}
+		}
+    	$row = '<TR class="'.$rc.$row_add_class.'"'.$row_add_attrs.' valign="top">';
 		for($i = 0; $i < $cols; $i++)
 		{
 			$row .= '<TD class="'.$this->class_name.$this->cols_align[$i].'"';

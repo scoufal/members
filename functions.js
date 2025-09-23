@@ -145,3 +145,12 @@ function toggleDisplayByToggleClass(cls) {
 		$( el ).toggleClass("hidden");
 	});
 }
+
+function toggleDisplayByData($key,$value) {
+
+    var lst = document.querySelectorAll('[' + $key + '="' + $value + '"]');
+
+	for(var i = 0; i < lst.length; ++i) {
+        (lst[i].style.display == '')?(lst[i].style.display='none'):(lst[i].style.display='');
+    }
+}

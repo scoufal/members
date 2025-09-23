@@ -50,10 +50,11 @@ if (IsSet($payment))
 			}
 
 			$var = "cat".$i;
-			$cat = $$var;
-			
-			$user = new Member($user_id);
-			$user->updateCategoryOnRace($race_id, $cat);
+			if (array_key_exists($var, $_REQUEST)) {
+				$cat = $$var;
+				$user = new Member($user_id);
+				$user->updateCategoryOnRace($race_id, $cat);
+			}
 			$i++;
 			$var = "userid".$i;
 		}

@@ -359,7 +359,7 @@ class OrisCZConnector implements ConnectorInterface {
 			}
 		}
 
-		print_r ($racePayement);
+		//print_r ($racePayement);
 
 		return $racePayement;
 	}

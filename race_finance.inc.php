@@ -2,7 +2,7 @@
 <?php /* finance -  show exact race finance */
 
 $query_prihlaseni = "
-select u.id u_id, u.sort_name, u.reg reg, f.id, f.amount, f.note, zu.kat, zu.transport, zu.ubytovani, ft.nazev, zu.participated, zu.add_by_fin from ".TBL_USER." u inner join
+select u.id u_id, u.sort_name, u.reg reg, f.id, f.amount, f.note, zu.kat, zu.transport, zu.ubytovani, ft.nazev, ft.id ft_id, zu.participated, zu.add_by_fin from ".TBL_USER." u inner join
 ".TBL_ZAVXUS." zu on u.id = zu.id_user left join
 (select * from ".TBL_FINANCE." where id_zavod = $race_id and storno is null) f on f.id_users_user = zu.id_user
 left join ".TBL_FINANCE_TYPES." ft on ft.id = u.finance_type
@@ -11,7 +11,7 @@ where zu.id_zavod = $race_id and u.hidden = '0' order by u.sort_name
 $vysledek_prihlaseni = query_db($query_prihlaseni);
 
 $query_platici = "
-select u.id u_id, u.sort_name, u.reg reg, f.id, f.amount, f.note, null kat, ft.nazev from ".TBL_USER." u inner join
+select u.id u_id, u.sort_name, u.reg reg, f.id, f.amount, f.note, null kat, ft.nazev, ft.id ft_id from ".TBL_USER." u inner join
 (select * from ".TBL_FINANCE." where id_zavod = $race_id and storno is null) f on f.id_users_user = u.id 
 left join ".TBL_FINANCE_TYPES." ft on ft.id = u.finance_type
 where f.id_zavod = $race_id
@@ -22,7 +22,7 @@ order by u.sort_name
 $vysledek_platici = query_db($query_platici);
 
 $query_neprihlaseni = "
-select u.id u_id, u.sort_name, u.reg reg, null id, null amount, null note, null kat, ft.nazev from ".TBL_USER." u 
+select u.id u_id, u.sort_name, u.reg reg, null id, null amount, null note, null kat, ft.nazev, ft.id ft_id from ".TBL_USER." u 
 left join ".TBL_FINANCE_TYPES." ft on ft.id = u.finance_type
 where u.id not in 
 (SELECT distinct(f.id_users_user) id
@@ -90,7 +90,41 @@ if ( !empty ( $ext_id ) && $connector!== null ) {
 			echo "</td>";
 		}
 
-		echo "</tr></table></div>";
+		echo "</tr></table>";
+
+		if (!empty($racePayement->overview->services)) {
+
+			echo '<table cellspacing="5">';
+			echo '<tr><th style="text-align:left;">Služba</th>';
+
+			foreach ($racePayement->overview->services as $name => $fees) {
+				for ($i = 0; $i < count($fees); $i++) {
+					echo "<td>$name</td>";
+				}
+			}
+
+			echo '</tr><tr><th style="text-align:left;">Cena</th>';
+
+			foreach ($racePayement->overview->services as $name => $fees) {
+				foreach($fees as $fee => $count) {
+					echo "<td>", $fee * $count, "</td>";
+				}
+			}
+			echo '</tr><tr><th style="text-align:left;">Počet</th>';
+			foreach ($racePayement->overview->services as $name => $fees) {
+				foreach ($fees as $fee => $count) {
+					echo "<td>$count</td>";
+				}
+			}
+			echo '</tr><tr><th style="text-align:left;">Jednotková cena</th>';
+			foreach ($racePayement->overview->services as $name => $fees) {
+				foreach ($fees as $fee => $count) {
+					echo "<td>$fee</td>";
+				}
+			}
+
+			echo "</tr></table>";
+		}
 	}
 } else {
 	$racePayement = new RacePayement(0);
@@ -110,6 +144,12 @@ function getOrisFee($reg) : string {
 	return '';
 }
 
+function getOrisClass($reg) : string {
+	global $g_shortcut;
+	global $racePayement;
+	$key = $g_shortcut . RegNumToStr($reg);
+	return $racePayement->participants[$key]->classDesc ?? '';
+}
 
 require_once ('./common_fin.inc.php');
 $enable_fin_types = IsFinanceTypeTblFilled();
@@ -117,11 +157,56 @@ $enable_fin_types = IsFinanceTypeTblFilled();
 ?>
 <div class="update-categories">
 <div class="sub-title">Naplň pouze vybrané kategorie pro přihlášené závodníky</div>
-Vše<input type="checkbox" id="all-ckbx"/><div id="ckbx-cat"></div>
-<label for="in-amount">Částka&nbsp;</label><input type="number" id="in-amount"/>
-<label for="in-note">&nbsp;Poznámka&nbsp;</label><input type="text" id="in-note"/>
-<button onclick="fillInputsByCategory()">Vlož</button><br/>
-<button onclick='toggleDisplayByToggleClass("notParticipated")'>Účastníci</button><button onclick='toggleDisplayByToggleClass("addByFin")'>Dohlášení</button>
+<?php
+if ($enable_fin_types) {
+
+	$query = "SELECT * FROM ".TBL_FINANCE_TYPES.' ORDER BY id';
+	@$fintypes=query_db($query);
+
+	if ($fintypes === FALSE ) {}
+	else {
+		echo '<div class="checkbox-row">Vše<input type="checkbox" id="all-fintype"/>&nbsp;=>&nbsp;<div id="ckbx-fintype">';
+		while ($zaznam=mysqli_fetch_array($fintypes))
+		{
+			echo '<span title="', ($zaznam['popis']??''),'">', $zaznam['nazev'];
+			echo '<input type="checkbox" class="ckbx-fintype" value="', $zaznam['id'], '" id="ckbx-', $zaznam['id'], '" />';
+			echo '</span>';
+		}
+		echo '</div></div>';
+	}
+}?>
+<div class="checkbox-row">Vše<input type="checkbox" id="all-ckbx"/>&nbsp;=>&nbsp;<div id="ckbx-cat"></div></div>
+<div class="form-row">
+  <div class="form-field">
+    <label for="in-amount">Částka</label>
+    <input type="number" id="in-amount" size="6" />
+  </div>
+
+  <div class="form-field">
+    <label for="in-note">Poznámka</label>
+    <input type="text" id="in-note" />
+  </div>
+
+  <div class="form-field">
+    <label for="entry-fee">Startovné</label>
+    <input type="text" id="entry-fee" size="3" inputmode="numeric" pattern="\d*"/>
+  </div>
+
+  <div class="form-field">
+    <label for="transport">Doprava</label>
+    <input type="text" id="transport" size="3" inputmode="numeric" pattern="\d*"/>
+  </div>
+
+  <div class="form-field">
+    <label for="accommodation">Ubytování</label>
+    <input type="text" id="accommodation" size="3" inputmode="numeric" pattern="\d*"/>
+  </div>
+  <div class="form-field">
+	&nbsp;<br/>
+	<button onclick="fillInputsByCategory()">Vlož</button><br/>
+  </div>
+</div>
+<button onclick='toggleDisplayByData("data-part","notParticipated")'>Účastníci</button><button onclick='toggleDisplayByData("data-fin","addByFin")'>Dohlášení</button>
 </div>
 
 <script>
@@ -147,6 +232,12 @@ function fillInputsByCategory() {
 
 	});
 }
+
+$("#all-fintype").click( function() {
+	$(".ckbx-fintype").prop('checked', $("#all-fintype").is(':checked'));
+});
+
+
 </script>
 
 <? 
@@ -157,13 +248,16 @@ DrawPageSubTitle('Závodníci v závodě');
 $data_tbl = new html_table_mc();
 $col = 0;
 $data_tbl->set_header_col($col++,'Jméno',ALIGN_LEFT);
-$data_tbl->set_header_col($col++,'Oris',ALIGN_LEFT);
 $data_tbl->set_header_col($col++,'Částka',ALIGN_LEFT);
 $data_tbl->set_header_col($col++,'Poznámka',ALIGN_LEFT);
 $data_tbl->set_header_col($col++,'Kategorie',ALIGN_CENTER);
 if ($enable_fin_types)
 	$data_tbl->set_header_col_with_help($col++,'Typ o.p.',ALIGN_CENTER,'Typ oddílových příspěvků');
 $data_tbl->set_header_col($col++,'Možnosti',ALIGN_CENTER);
+if ( !empty ( $ext_id ) && $connector!== null ) {
+	$data_tbl->set_header_col_with_help($col++,'Oris',ALIGN_LEFT,'Platba z orisu/termín');
+}
+$data_tbl->set_header_col_with_help($col++,'Sta.',ALIGN_LEFT,'Startovné');
 if ($g_enable_race_transport)
 	$data_tbl->set_header_col_with_help($col++,'Dop.',ALIGN_CENTER,'Společná doprava');
 if ($g_enable_race_accommodation)
@@ -193,8 +287,6 @@ while ($zaznam=mysqli_fetch_assoc($vysledek_prihlaseni))
 	$row = array();
 	$row[] = "<A href=\"javascript:open_win_ex('./view_address.php?id=".$zaznam["u_id"]."','',500,540)\" class=\"adr_name\">".$zaznam['sort_name']."</A>";
 	
-	$row[] = getOrisFee($zaznam['reg']);
-
 	$amount = $zaznam['amount'];
 	$amount>0?$sum_plus_amount+=$amount:$sum_minus_amount+=$amount;
 	
@@ -205,28 +297,40 @@ while ($zaznam=mysqli_fetch_assoc($vysledek_prihlaseni))
 	$input_note = '<input class="note-'.$kat_id.' '.($zaznam['participated'] ? 'participated ' : ' ').($zaznam['add_by_fin'] ? 'addByFin ' : ' ').'" type="text" id="nt'.$i.'" name="nt'.$i.'" value="'.$note.'" size="40" maxlength="200" />';
 	$row[] = $input_note;
 	
-	$row[] = '<input type="text" class="cat" id="cat'.$i.'" name="cat'.$i.'" size="10" maxlength="10" value="'.$kat.'" />';
+	$row[] = '<input type="text" class="cat" id="cat'.$i.'" name="cat'.$i.'" size="6" maxlength="10" value="'.$kat.'" />';
 	if ($enable_fin_types)
 		$row[] = ($zaznam['nazev'] != null)? $zaznam['nazev'] : '-';
 
 	$row_text = '<A HREF="javascript:open_win(\'./user_finance_view.php?user_id='.$zaznam['u_id'].'\',\'\')">Platby</A>';
 	$row_text .= '<input type="hidden" id="userid'.$i.'" name="userid'.$i.'" value="'.$zaznam["u_id"].'"/><input type="hidden" id="paymentid'.$i.'" name="paymentid'.$i.'" value="'.$zaznam["id"].'"/>'; 
 	$row[] = $row_text;
+
+	if ( !empty ( $ext_id ) && $connector!== null ) {
+		$row[] = getOrisFee($zaznam['reg']);
+	}
+
+	// startovne
+	$row[] = '';
+
 	if ($g_enable_race_transport)
 	{
-		$trans=$zaznam['transport']==1?"ANO":"&nbsp;";
+		$trans=$zaznam['transport']==1?"&#x2714;":"&nbsp;";
 		$row[] = "<span>".$trans."</span>";
 	}
 	if ($g_enable_race_accommodation)
 	{
-		$ubyt=$zaznam['ubytovani']==1?"ANO":"&nbsp;";
+		$ubyt=$zaznam['ubytovani']==1?"&#x2714;":"&nbsp;";
 		$row[] = "<span>".$ubyt."</span>";
 	}
 	$row[] = ($zaznam['participated'] ? 'A' : '').($zaznam['add_by_fin'] ? 'F' : '');
 
 	$row_class = "cat-".$kat_id." ".($zaznam['participated'] ? 'participated ' : 'notParticipated ').($zaznam['add_by_fin'] ? 'addByFin ' : 'addByUser ');
 
-	echo $data_tbl->get_new_row_arr($row, $row_class)."\n";
+	$attrs = [ 'class' => $row_class, 'data-kat' => $kat_id, 
+	    'data-part' => ($zaznam['participated'] ? 'participated' : 'notParticipated'),
+		'data-fin' => ($zaznam['add_by_fin'] ? 'addByFin' : 'addByUser' ),
+		'data-fintype' => $zaznam['ft_id']];
+	echo $data_tbl->get_new_row_arr($row, $attrs)."\n";
 	$i++;
 }
 if ($i == 1)
@@ -238,12 +342,19 @@ $i0 = $i;
 echo $data_tbl->get_subheader_row("Nepřihlášení s platbami")."\n";
 while ($zaznam=mysqli_fetch_assoc($vysledek_platici))
 {
+	$attrs = ['data-fintype' => $zaznam['ft_id']];
+
+	if ( !empty ( $ext_id ) && $connector!== null ) {
+		$kat = getOrisClass($zaznam['reg']);
+		if (!in_array($kat, $arr_kat)) $arr_kat[] = $kat;
+		$kat_id = array_search($kat, $arr_kat);
+		$attrs['data-kat'] = $kat_id;
+	}
+
 	$id = $zaznam['id'];
 	
 	$row = array();
 	$row[] = "<A href=\"javascript:open_win('./view_address.php?id=".$zaznam["u_id"]."','')\" class=\"adr_name\">".$zaznam['sort_name']."</A>";
-
-	$row[] = getOrisFee($zaznam['reg']);
 
 	$amount = $zaznam['amount'];
 	$amount>0?$sum_plus_amount+=$amount:$sum_minus_amount+=$amount;
@@ -255,16 +366,24 @@ while ($zaznam=mysqli_fetch_assoc($vysledek_platici))
 	$input_note = '<input type="text" id="nt'.$i.'" name="nt'.$i.'" value="'.$note.'" size="40" maxlength="200" />';
 	$row[] = $input_note;
 
-	$row[] = $zaznam['kat'];
+	if ( !empty ( $ext_id ) && $connector!== null ) {
+		$row[] = '<input type="text" class="cat" id="cat'.$i.'" name="cat'.$i.'" size="6" maxlength="10" value="'.$kat.'" readonly/>';
+	}
+
 	if ($enable_fin_types)
 		$row[] = ($zaznam['nazev'] != null)? $zaznam['nazev'] : '-';
 	
 	$row_text = '<A HREF="javascript:open_win(\'./user_finance_view.php?user_id='.$zaznam['u_id'].'\',\'\')">Platby</A>';
 	$row_text .= '<input type="hidden" id="userid'.$i.'" name="userid'.$i.'" value="'.$zaznam["u_id"].'"/><input type="hidden" id="paymentid'.$i.'" name="paymentid'.$i.'" value="'.$zaznam["id"].'"/>';
 	$row[] = $row_text;
+
+	if ( !empty ( $ext_id ) && $connector!== null ) {
+		$row[] = getOrisFee($zaznam['reg']);
+	}
 	$row[] = '';
 
-	echo $data_tbl->get_new_row_arr($row)."\n";
+	echo $data_tbl->get_new_row_arr($row, $attrs)."\n";
+
 	$i++;
 }
 if (($i - $i0) == 0)
@@ -285,13 +404,15 @@ DrawPageSubTitle('Ostatní závodníci');
 $data_tbl = new html_table_mc();
 $col = 0;
 $data_tbl->set_header_col($col++,'Jméno',ALIGN_LEFT);
-$data_tbl->set_header_col($col++,'Oris',ALIGN_LEFT);
 $data_tbl->set_header_col($col++,'Částka',ALIGN_LEFT);
 $data_tbl->set_header_col($col++,'Poznámka',ALIGN_LEFT);
 $data_tbl->set_header_col($col++,'Kategorie',ALIGN_CENTER);
 if ($enable_fin_types)
 	$data_tbl->set_header_col_with_help($col++,'Typ o.p.',ALIGN_CENTER,"Typ oddílových příspěvků");
 $data_tbl->set_header_col($col++,'Možnosti',ALIGN_CENTER);
+if ( !empty ( $ext_id ) && $connector!== null ) {
+	$data_tbl->set_header_col($col++,'Oris',ALIGN_LEFT);
+}
 
 echo $data_tbl->get_css()."\n";
 echo $data_tbl->get_header()."\n";
@@ -301,13 +422,12 @@ $i = 1;
 while ($zaznam=mysqli_fetch_assoc($vysledek_neprihlaseni))
 {
 	
+	$attrs = ['data-fintype' => $zaznam['ft_id']];
 	$id = $zaznam['id'];
 	
 	$row = array();
 	$row[] = "<A href=\"javascript:open_win('./view_address.php?id=".$zaznam["u_id"]."','')\" class=\"adr_name\">".$zaznam['sort_name']."</A>";
 	
-	$row[] = getOrisFee($zaznam['reg']);
-
 	$amount = $zaznam['amount'];
 	$input_amount = '<input type="number" id="am'.$i.'" name="am'.$i.'" value="'.$amount.'" size="5" maxlength="10" />';
 	$row[] = $input_amount;
@@ -324,7 +444,11 @@ while ($zaznam=mysqli_fetch_assoc($vysledek_neprihlaseni))
 	$row_text .= '<input type="hidden" id="userid'.$i.'" name="userid'.$i.'" value="'.$zaznam["u_id"].'"/><input type="hidden" id="paymentid'.$i.'" name="paymentid'.$i.'" value="'.$zaznam["id"].'"/>';
 	$row[] = $row_text;
 
-	echo $data_tbl->get_new_row_arr($row)."\n";
+	if ( !empty ( $ext_id ) && $connector!== null ) {
+		$row[] = getOrisFee($zaznam['reg']);
+	}
+
+	echo $data_tbl->get_new_row_arr($row,$attrs)."\n";
 	$i++;
 }
 if ($i == 1)
@@ -354,4 +478,7 @@ jQuery.each( cats, function( index, value ) {
 $("INPUT[type='checkbox'][class='ckbx-cat']").click( function() {
 	$("#all-ckbx").prop('checked', false); 
 });
-</script>
+
+$("INPUT[type='checkbox'][class='ckbx-fintype']").click( function() {
+	$("#all-fintype").prop('checked', false); 
+});</script>
