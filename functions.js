@@ -146,11 +146,56 @@ function toggleDisplayByToggleClass(cls) {
 	});
 }
 
-function toggleDisplayByData($key,$value) {
+function toggleDisplayByData(key,value) {
 
-    var lst = document.querySelectorAll('[' + $key + '="' + $value + '"]');
+    var lst = document.querySelectorAll('[' + key + '="' + value + '"]');
 
 	for(var i = 0; i < lst.length; ++i) {
         (lst[i].style.display == '')?(lst[i].style.display='none'):(lst[i].style.display='');
     }
+}
+
+function getCheckedIds (key) {
+
+	const allCheckboxes = Array.from(document.querySelectorAll('input[type="checkbox"][data-key="' + key + '"][data-role="one"]'));
+	const checkedValues = allCheckboxes.filter(cb => cb.checked).map(cb => cb.value);
+
+	if ( checkedValues.length == 0 ) {
+		return null;
+	} else {
+		return new Set( checkedValues );
+	}
+
+}
+
+function updateRows(rowModifier) {
+
+  // Collect all checkbox groups
+  const groups = {};
+  document.querySelectorAll("div.checkbox-row[data-key]").forEach(div => {
+    const key = div.dataset.key; // e.g. "fintype", "kat", ...
+    groups[key] = getCheckedIds(key); // Set or null
+  });
+
+ // Build selector: rows with at least one data-* attribute defined
+  const selector = Object.keys(groups)
+    .map(key => `[data-${key}]`)
+    .join(",");
+  console.log("Selector:", selector);
+
+  const rows = document.querySelectorAll('tr' + selector);
+  console.log("Rows:", rows.length);
+  
+  rows.forEach(row => {
+	match = true;
+
+	for (const [key, checkedTypes] of Object.entries(groups)) {
+		if ( row.dataset[key] ) { // only if the row has this data-key attribute
+			if ( !checkedTypes )  { match = false; break; } // no value selected for this key
+			if ( !checkedTypes.has(row.dataset[key]) ) { match = false; break; } // not in the filter
+		}
+	}
+
+    rowModifier(row, match);
+  });
 }

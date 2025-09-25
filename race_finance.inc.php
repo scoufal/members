@@ -1,40 +1,27 @@
+
+
 <link rel="stylesheet" type="text/css" href="css_finance.css" media="screen" />
 <?php /* finance -  show exact race finance */
 
-$query_prihlaseni = "
-select u.id u_id, u.sort_name, u.reg reg, f.id, f.amount, f.note, zu.kat, zu.transport, zu.ubytovani, ft.nazev, ft.id ft_id, zu.participated, zu.add_by_fin from ".TBL_USER." u inner join
-".TBL_ZAVXUS." zu on u.id = zu.id_user left join
-(select * from ".TBL_FINANCE." where id_zavod = $race_id and storno is null) f on f.id_users_user = zu.id_user
-left join ".TBL_FINANCE_TYPES." ft on ft.id = u.finance_type
-where zu.id_zavod = $race_id and u.hidden = '0' order by u.sort_name
-";
-$vysledek_prihlaseni = query_db($query_prihlaseni);
-
-$query_platici = "
-select u.id u_id, u.sort_name, u.reg reg, f.id, f.amount, f.note, null kat, ft.nazev, ft.id ft_id from ".TBL_USER." u inner join
-(select * from ".TBL_FINANCE." where id_zavod = $race_id and storno is null) f on f.id_users_user = u.id 
-left join ".TBL_FINANCE_TYPES." ft on ft.id = u.finance_type
-where f.id_zavod = $race_id
-and u.id not in (select id_user from ".TBL_ZAVXUS." where id_zavod = $race_id) 
-and u.hidden = '0' 
-order by u.sort_name
-";
-$vysledek_platici = query_db($query_platici);
-
-$query_neprihlaseni = "
-select u.id u_id, u.sort_name, u.reg reg, null id, null amount, null note, null kat, ft.nazev, ft.id ft_id from ".TBL_USER." u 
-left join ".TBL_FINANCE_TYPES." ft on ft.id = u.finance_type
-where u.id not in 
-(SELECT distinct(f.id_users_user) id
-FROM ".TBL_FINANCE." f where f.id_zavod = $race_id and f.storno is null
-union 
-SELECT distinct(zu.id_user) id
-FROM ".TBL_ZAVXUS." zu where zu.id_zavod = $race_id) 
-and u.hidden = '0' 
-order by u.sort_name
-";
-
-$vysledek_neprihlaseni = query_db($query_neprihlaseni);
+$query_all = "SELECT 
+    u.id AS u_id, u.sort_name, u.reg, u.finance_type,
+	f.id, f.amount, f.note,
+	zu.id AS zu_id, zu.kat, zu.transport, zu.ubytovani, zu.participated, zu.add_by_fin
+FROM ".TBL_USER." u
+LEFT JOIN ".TBL_ZAVXUS." zu
+       ON u.id = zu.id_user 
+      AND zu.id_zavod = $race_id
+LEFT JOIN ".TBL_FINANCE." f
+       ON f.id_users_user = u.id
+      AND f.id_zavod = $race_id
+      AND f.storno IS NULL
+WHERE u.hidden = '0'
+ORDER BY zu_id is not null DESC, f.id is not null DESC, u.sort_name ASC";
+@$vysledek_all=query_db($query_all);
+if ($vysledek_all === FALSE )
+{
+	die('Chyba v databázi, kontaktuje administrátora.<br>');
+}
 
 //vytazeni informaci o zavode
 @$vysledek_race=query_db("select z.nazev, from_unixtime(z.datum, '%Y-%c-%e') datum from ".TBL_RACE." z where z.id = ".$race_id);
@@ -154,28 +141,170 @@ function getOrisClass($reg) : string {
 require_once ('./common_fin.inc.php');
 $enable_fin_types = IsFinanceTypeTblFilled();
 
+class CheckboxRow {
+    private string $name;    // e.g. Kategorie
+    private string $key;     // e.g. cat
+	private bool $hasAll;    // has all checkbox
+    private array $entries = [];   // store added entries
+	private array $idToEntry = []; // loopback map id → label
+
+	/**
+	 * Constructor
+	 * @param string $name   Visible name
+	 * @param string $key    Unique key for HTML data-key attribute
+	 * @param bool   $hasAll Include "all" checkbox
+	 */
+    public function __construct(string $name, string $key, bool $hasAll = true) {
+        $this->name = $name;
+        $this->key  = $key;
+		$this->hasAll = $hasAll;
+    }
+
+    /**
+     * Add an entry by unique label, return the entry id
+     * @param string     $label   Visible label text
+     * @param string     $title   Tooltip text (optional)
+     * @param int|string $id      Entry value (optional, defaults to index)
+     * @param bool       $checked Pre-checked state
+     * @param bool       $active  Add immediately to active list
+     */
+    public function addEntry(
+        string $label,
+        ?string $title = null,
+        ?string $id = null,
+        bool $checked = false,
+        bool $active = false
+    ): int {
+		if ( isset($this->entries[$label]) ) {
+			// allready exist, might activate
+			if ($active) {
+				$this->entries[$label]['active'] = true;
+			}
+			return $this->entries[$label]['id'];
+		}
+
+		// create new entry
+        $id = $id ?? count($this->entries);
+        $this->entries[$label] = $entry = [
+            'label'   => $label,
+            'title'   => $title,
+            'id'      => $id,
+            'checked' => $checked,
+            'active'  => $active
+        ];
+
+		// update loopback map for fast id → label lookup
+    	$this->idToEntry[$id] = $entry;
+
+		return $id;
+    }
+
+	/**
+	 * Get label by entry ID, automatically activates the entry if found
+	 */
+	public function getLabel(int|string $id): ?string {
+
+		$entry = $this->idToEntry[$id];
+		if ( isset($entry) && !$entry['active'] ) {
+			// activate if not active yet (avoid Copy on write)
+			$this->entries[$entry['label']]['active'] = true;
+			return $entry['label'] ?? null;
+		}
+		return null;
+	}
+
+    public function setActive(string $label): ?int {
+		if ( isset($this->entries[$label]) ) {
+			// allready exist, might activate
+			$this->entries[$label]['active'] = true;
+			return $this->entries[$label]['id'];
+		}
+        return null;
+    }
+
+    /**
+     * Render innerHTML
+     */
+    public function render(): string {
+       $html = '';
+
+        // top-level "all" checkbox
+        $html .= $this->name;
+		if ($this->hasAll) {
+	        $html .= '<input type="checkbox" data-role="all" data-key="' . htmlspecialchars($this->key) . '">&nbsp;=&gt;&nbsp;';
+		} else {
+			$html .= '&nbsp;:&nbsp;&nbsp;';
+		}
+
+        foreach ($this->entries as $label => $entry) {
+            // if activeIds filter is set, skip others
+            if (!$entry['active']) {
+                continue;
+            }
+
+            $html .= empty($entry['label']) ? '(None)' : htmlspecialchars($entry['label']);
+            $html .= '<input type="checkbox" data-role="one" data-key="' . htmlspecialchars($this->key) . '" value="' . $entry['id'] . '"';
+            if (!empty($entry['title'])) {
+                $html .= ' title="' . htmlspecialchars($entry['title']) . '"';
+            }
+            if ($entry['checked']) {
+                $html .= ' checked';
+            }
+            $html .= '>';
+		}
+
+		return $html;
+    }
+}
+
+$checkBoxRows = []; // rows of check boxes
+$checkBoxRows['cat'] = new CheckboxRow ( 'Kategorie', 'cat' );
+$checkBoxRows['as'] = $cbu = new CheckboxRow ( 'Účastník', 'as', false );
+$cbu->addEntry('Přihlášen', 'Závodník byl přihlášen do závodu', null, true, true);
+$cbu->addEntry('Neřihlášen s platbami', 'Závodník byl přidán do závodu', null, true, true);
+$cbu->addEntry('Ostatní', 'Závodník nebyl přihlášen do závodu', null, false, true);
+$checkBoxRows['participated'] = $cbp = new CheckboxRow ( 'Přidán v účasti', 'participated', false );
+$cbp->addEntry('Ano', 'Závodník byl přidán', 1, true, true);
+$cbp->addEntry('Ne', 'Závodník nebyl přidán', 0, true, true);
+$checkBoxRows['addByFin'] = $cbabf = new CheckboxRow ( 'Přidán ve financích', 'addByFin', false );
+$cbabf->addEntry('Ano', 'Závodník byl přidán', 1, true, true);
+$cbabf->addEntry('Ne', 'Závodník nebyl přidán', 0, true, true);
+
+
 ?>
 <div class="update-categories">
 <div class="sub-title">Naplň pouze vybrané kategorie pro přihlášené závodníky</div>
+<div class="checkbox-row" data-key="cat"></div>
+<div class="checkbox-row" data-key="fintype"></div>
+<div class="checkbox-row">
+<div class="checkbox-row" data-key="as"></div>
+<span style="width: 2em;">&nbsp;</span>
+<div class="checkbox-row" data-key="participated"></div>
+<span style="width: 2em;">&nbsp;</span>
+<div class="checkbox-row" data-key="addByFin"></div>
+</div>
+
 <?php
 if ($enable_fin_types) {
+
+	// create checkbox definition with lookup
 
 	$query = "SELECT * FROM ".TBL_FINANCE_TYPES.' ORDER BY id';
 	@$fintypes=query_db($query);
 
 	if ($fintypes === FALSE ) {}
 	else {
-		echo '<div class="checkbox-row">Vše<input type="checkbox" id="all-fintype"/>&nbsp;=>&nbsp;<div id="ckbx-fintype">';
+
+		$cbr = new CheckboxRow ( 'Typ o.p.', 'fintype' );
+		$cbr->addEntry('-', 'Není definováno', 0, false, false); // null value represented by -
+
 		while ($zaznam=mysqli_fetch_array($fintypes))
 		{
-			echo '<span title="', ($zaznam['popis']??''),'">', $zaznam['nazev'];
-			echo '<input type="checkbox" class="ckbx-fintype" value="', $zaznam['id'], '" id="ckbx-', $zaznam['id'], '" />';
-			echo '</span>';
+			$cbr->addEntry($zaznam['nazev'],$zaznam['popis'],$zaznam['id'],false,false);
 		}
-		echo '</div></div>';
+		$checkBoxRows['fintype'] = $cbr;
 	}
 }?>
-<div class="checkbox-row">Vše<input type="checkbox" id="all-ckbx"/>&nbsp;=>&nbsp;<div id="ckbx-cat"></div></div>
 <div class="form-row">
   <div class="form-field">
     <label for="in-amount">Částka</label>
@@ -203,17 +332,36 @@ if ($enable_fin_types) {
   </div>
   <div class="form-field">
 	&nbsp;<br/>
-	<button onclick="fillInputsByCategory()">Vlož</button><br/>
+	<button onclick="fillInputsByCategory()" title="Vložení hodnot do vybraných řádků">Přepiš</button><br/>
+  </div>
+  <div class="form-field">
+	&nbsp;<br/>
+	<button onclick="fillInputsByCategory()" title="Vložení hodnot pokud není vyplněna částka">Vlož</button><br/>
+  </div>
+  <div class="form-field">
+	&nbsp;<br/>
+	<button onclick="fillInputsByCategory()" title="Přičtení hodnot, poznámky odděleny /">Přidej</button><br/>
   </div>
 </div>
-<button onclick='toggleDisplayByData("data-part","notParticipated")'>Účastníci</button><button onclick='toggleDisplayByData("data-fin","addByFin")'>Dohlášení</button>
 </div>
 
 <script>
-//zaskrtnuti vse checkboxu po kliku na Vse
-$("#all-ckbx").click( function() {
-	$(".ckbx-cat").prop('checked', $("#all-ckbx").is(':checked'));
-});
+
+const markSelected = (row, match) => {
+  const span = row.querySelector("td .state");
+  if (!span) return;
+
+  // if not pinned, force state = selected/unpinned
+  if (!span.classList.contains("pinned")) {
+	if ( match ) {
+		span.className = "state selected";
+		span.textContent = "✔";
+	} else {
+		span.className = "state unpinned";
+		span.textContent = "📌";
+	}
+  }
+};
 
 //naplni amount a note hodnotama z inputu in-amount a in-note
 function fillInputsByCategory() {
@@ -231,12 +379,29 @@ function fillInputsByCategory() {
 		}
 
 	});
+
+	var start = $("#entry-fee").val(); // jQuery value
+	var transport = $("#transport").val(); // jQuery value
+	var acc = $("#accommodation").val(); // jQuery value
+
+	updateRows((row, match) => {
+	if (match) {
+		if (start) {
+			const cell = row.querySelector("[data-col='start']");
+			if (cell) cell.textContent = start;
+		}
+		if (transport) {
+			const cell = row.querySelector("[data-col='trans']");
+			if (cell) cell.textContent = transport;
+		}
+		if (acc) {
+			const cell = row.querySelector("[data-col='acc']");
+			if (cell) cell.textContent = acc;
+		}
+	}
+	});
+
 }
-
-$("#all-fintype").click( function() {
-	$(".ckbx-fintype").prop('checked', $("#all-fintype").is(':checked'));
-});
-
 
 </script>
 
@@ -247,6 +412,7 @@ echo "<form method=\"post\" action=\"?payment=pay&race_id=$race_id\">";
 DrawPageSubTitle('Závodníci v závodě');
 $data_tbl = new html_table_mc();
 $col = 0;
+$data_tbl->set_header_col($col++,'&nbsp;',ALIGN_LEFT);
 $data_tbl->set_header_col($col++,'Jméno',ALIGN_LEFT);
 $data_tbl->set_header_col($col++,'Částka',ALIGN_LEFT);
 $data_tbl->set_header_col($col++,'Poznámka',ALIGN_LEFT);
@@ -273,33 +439,39 @@ $sum_plus_amount = 0;
 $sum_minus_amount = 0;
 $i = 1;
 
-$arr_kat = array();
+$zaznam=null; // inicializace for hand over between loops
 
 echo $data_tbl->get_subheader_row("Přihlášení")."\n";
-while ($zaznam=mysqli_fetch_assoc($vysledek_prihlaseni))
+while ($zaznam=mysqli_fetch_assoc($vysledek_all))
 {
+	if ( !isset($zaznam['zu_id'])) {
+		break; // 
+	}
+
 	$kat = $zaznam['kat'];
-	if (!in_array($kat, $arr_kat)) $arr_kat[] = $kat;
-	$kat_id = array_search($kat, $arr_kat);
+	$kat_id = $checkBoxRows['cat']->addEntry($kat,null,null,false,true);
 	
 	$id = $zaznam['id'];
 	
 	$row = array();
+	$row[] = '<span class="state unpinned">📌</span>';
 	$row[] = "<A href=\"javascript:open_win_ex('./view_address.php?id=".$zaznam["u_id"]."','',500,540)\" class=\"adr_name\">".$zaznam['sort_name']."</A>";
 	
 	$amount = $zaznam['amount'];
 	$amount>0?$sum_plus_amount+=$amount:$sum_minus_amount+=$amount;
 	
-	$input_amount = '<input class="amount-'.$kat_id.' '.($zaznam['participated'] ? 'participated ' : ' ').($zaznam['add_by_fin'] ? 'addByFin ' : ' ').'" type="number" id="am'.$i.'" name="am'.$i.'" value="'.$amount.'" size="5" maxlength="10" />';
+	$input_amount = '<input class="amount" type="number" id="am'.$i.'" name="am'.$i.'" value="'.$amount.'" size="5" maxlength="10" />';
 	$row[] = $input_amount;
 	
 	$note = $zaznam['note'];
-	$input_note = '<input class="note-'.$kat_id.' '.($zaznam['participated'] ? 'participated ' : ' ').($zaznam['add_by_fin'] ? 'addByFin ' : ' ').'" type="text" id="nt'.$i.'" name="nt'.$i.'" value="'.$note.'" size="40" maxlength="200" />';
+	$input_note = '<input class="note" type="text" id="nt'.$i.'" name="nt'.$i.'" value="'.$note.'" size="40" maxlength="200" />';
 	$row[] = $input_note;
 	
 	$row[] = '<input type="text" class="cat" id="cat'.$i.'" name="cat'.$i.'" size="6" maxlength="10" value="'.$kat.'" />';
-	if ($enable_fin_types)
-		$row[] = ($zaznam['nazev'] != null)? $zaznam['nazev'] : '-';
+	if ($enable_fin_types) {
+		$fintype = $zaznam['finance_type'] ?? '0'; 
+		$row[] = $checkBoxRows['fintype']->getLabel($fintype) ?? '-';
+	}
 
 	$row_text = '<A HREF="javascript:open_win(\'./user_finance_view.php?user_id='.$zaznam['u_id'].'\',\'\')">Platby</A>';
 	$row_text .= '<input type="hidden" id="userid'.$i.'" name="userid'.$i.'" value="'.$zaznam["u_id"].'"/><input type="hidden" id="paymentid'.$i.'" name="paymentid'.$i.'" value="'.$zaznam["id"].'"/>'; 
@@ -310,26 +482,27 @@ while ($zaznam=mysqli_fetch_assoc($vysledek_prihlaseni))
 	}
 
 	// startovne
-	$row[] = '';
+	$row[] = '<span data-col="start"></span>';
 
 	if ($g_enable_race_transport)
 	{
 		$trans=$zaznam['transport']==1?"&#x2714;":"&nbsp;";
-		$row[] = "<span>".$trans."</span>";
+		$row[] = "<span data-col='trans'>".$trans."</span>";
 	}
 	if ($g_enable_race_accommodation)
 	{
 		$ubyt=$zaznam['ubytovani']==1?"&#x2714;":"&nbsp;";
-		$row[] = "<span>".$ubyt."</span>";
+		$row[] = "<span data-col='acc'>".$ubyt."</span>";
 	}
 	$row[] = ($zaznam['participated'] ? 'A' : '').($zaznam['add_by_fin'] ? 'F' : '');
 
 	$row_class = "cat-".$kat_id." ".($zaznam['participated'] ? 'participated ' : 'notParticipated ').($zaznam['add_by_fin'] ? 'addByFin ' : 'addByUser ');
 
-	$attrs = [ 'class' => $row_class, 'data-kat' => $kat_id, 
-	    'data-part' => ($zaznam['participated'] ? 'participated' : 'notParticipated'),
-		'data-fin' => ($zaznam['add_by_fin'] ? 'addByFin' : 'addByUser' ),
-		'data-fintype' => $zaznam['ft_id']];
+	$attrs = [ 'class' => $row_class, 'data-cat' => $kat_id, 
+	    'data-participated' => $zaznam['participated']??0,
+		'data-addByFin' => $zaznam['add_by_fin']??0,
+		'data-fintype' => $zaznam['finance_type']??0,
+		'data-as' => '0' ]; // participant
 	echo $data_tbl->get_new_row_arr($row, $attrs)."\n";
 	$i++;
 }
@@ -340,20 +513,25 @@ if ($i == 1)
 $i0 = $i;
 //---------------------------------------------------
 echo $data_tbl->get_subheader_row("Nepřihlášení s platbami")."\n";
-while ($zaznam=mysqli_fetch_assoc($vysledek_platici))
-{
-	$attrs = ['data-fintype' => $zaznam['ft_id']];
+do  {
+
+	if( $zaznam === null || !isset($zaznam['id']) ) {
+		break; // no more records or no payment
+	}
+
+	$attrs = ['data-fintype' => $zaznam['finance_type']??0,
+		'data-as' => '1']; // other payer
 
 	if ( !empty ( $ext_id ) && $connector!== null ) {
 		$kat = getOrisClass($zaznam['reg']);
-		if (!in_array($kat, $arr_kat)) $arr_kat[] = $kat;
-		$kat_id = array_search($kat, $arr_kat);
-		$attrs['data-kat'] = $kat_id;
+		$kat_id = $checkBoxRows['cat']->addEntry($kat,null,null,true,true);
+		$attrs['data-cat'] = $kat_id;
 	}
 
-	$id = $zaznam['id'];
+	$id = $zaznam['u_id'];
 	
 	$row = array();
+	$row[] = '<span class="state unpinned">📌</span>';
 	$row[] = "<A href=\"javascript:open_win('./view_address.php?id=".$zaznam["u_id"]."','')\" class=\"adr_name\">".$zaznam['sort_name']."</A>";
 
 	$amount = $zaznam['amount'];
@@ -370,8 +548,10 @@ while ($zaznam=mysqli_fetch_assoc($vysledek_platici))
 		$row[] = '<input type="text" class="cat" id="cat'.$i.'" name="cat'.$i.'" size="6" maxlength="10" value="'.$kat.'" readonly/>';
 	}
 
-	if ($enable_fin_types)
-		$row[] = ($zaznam['nazev'] != null)? $zaznam['nazev'] : '-';
+	if ($enable_fin_types) {
+		$fintype = $zaznam['finance_type'] ?? 0; 
+		$row[] = $checkBoxRows['fintype']->getLabel($fintype) ?? '-';
+	}
 	
 	$row_text = '<A HREF="javascript:open_win(\'./user_finance_view.php?user_id='.$zaznam['u_id'].'\',\'\')">Platby</A>';
 	$row_text .= '<input type="hidden" id="userid'.$i.'" name="userid'.$i.'" value="'.$zaznam["u_id"].'"/><input type="hidden" id="paymentid'.$i.'" name="paymentid'.$i.'" value="'.$zaznam["id"].'"/>';
@@ -380,12 +560,24 @@ while ($zaznam=mysqli_fetch_assoc($vysledek_platici))
 	if ( !empty ( $ext_id ) && $connector!== null ) {
 		$row[] = getOrisFee($zaznam['reg']);
 	}
-	$row[] = '';
+
+	// startovne
+	$row[] = '<span data-col="start"></span>';	
+	if ($g_enable_race_transport)
+	{
+		$row[] = "<span data-col='trans'></span>";
+	}
+	if ($g_enable_race_accommodation)
+	{
+		$row[] = "<span data-col='acc'></span>";
+	}
 
 	echo $data_tbl->get_new_row_arr($row, $attrs)."\n";
 
 	$i++;
-}
+} while ($zaznam=mysqli_fetch_assoc($vysledek_all) );
+
+
 if (($i - $i0) == 0)
 {	// zadny zavodnik s vkladem
 	echo $data_tbl->get_info_row('Není nikdo jen s platbou.')."\n";
@@ -401,31 +593,26 @@ echo '</form>';
 echo "<form method=\"post\" action=\"?payment=pay&race_id=$race_id\">";
 
 DrawPageSubTitle('Ostatní závodníci');
-$data_tbl = new html_table_mc();
-$col = 0;
-$data_tbl->set_header_col($col++,'Jméno',ALIGN_LEFT);
-$data_tbl->set_header_col($col++,'Částka',ALIGN_LEFT);
-$data_tbl->set_header_col($col++,'Poznámka',ALIGN_LEFT);
-$data_tbl->set_header_col($col++,'Kategorie',ALIGN_CENTER);
-if ($enable_fin_types)
-	$data_tbl->set_header_col_with_help($col++,'Typ o.p.',ALIGN_CENTER,"Typ oddílových příspěvků");
-$data_tbl->set_header_col($col++,'Možnosti',ALIGN_CENTER);
-if ( !empty ( $ext_id ) && $connector!== null ) {
-	$data_tbl->set_header_col($col++,'Oris',ALIGN_LEFT);
-}
 
-echo $data_tbl->get_css()."\n";
+// reuse the same table $data_tbl
+
+
 echo $data_tbl->get_header()."\n";
 echo $data_tbl->get_header_row()."\n";
 
 $i = 1;
-while ($zaznam=mysqli_fetch_assoc($vysledek_neprihlaseni))
-{
-	
-	$attrs = ['data-fintype' => $zaznam['ft_id']];
+do {
+	if( $zaznam === null ) {
+		break; // no more records
+	}
+
+	$attrs = [ 'data-fintype' => $zaznam['finance_type'] ?? 0,
+		'data-as' => '2' ]; // other non-payer
+
 	$id = $zaznam['id'];
 	
 	$row = array();
+	$row[] = '<span class="state unpinned">📌</span>';
 	$row[] = "<A href=\"javascript:open_win('./view_address.php?id=".$zaznam["u_id"]."','')\" class=\"adr_name\">".$zaznam['sort_name']."</A>";
 	
 	$amount = $zaznam['amount'];
@@ -437,8 +624,11 @@ while ($zaznam=mysqli_fetch_assoc($vysledek_neprihlaseni))
 	$row[] = $input_note;
 	
 	$row[] = $zaznam['kat'];
-	if ($enable_fin_types)
-		$row[] = ($zaznam['nazev'] != null)? $zaznam['nazev'] : '-';
+
+	if ($enable_fin_types) {
+		$fintype = $zaznam['finance_type'] ?? 0; 
+		$row[] = $checkBoxRows['fintype']->getLabel($fintype) ?? '-';
+	}
 	
 	$row_text = '<A HREF="javascript:open_win(\'./user_finance_view.php?user_id='.$zaznam['u_id'].'\',\'\')">Platby</A>';
 	$row_text .= '<input type="hidden" id="userid'.$i.'" name="userid'.$i.'" value="'.$zaznam["u_id"].'"/><input type="hidden" id="paymentid'.$i.'" name="paymentid'.$i.'" value="'.$zaznam["id"].'"/>';
@@ -450,7 +640,8 @@ while ($zaznam=mysqli_fetch_assoc($vysledek_neprihlaseni))
 
 	echo $data_tbl->get_new_row_arr($row,$attrs)."\n";
 	$i++;
-}
+} while ($zaznam=mysqli_fetch_assoc($vysledek_all) );
+
 if ($i == 1)
 {	// neni nikdo neprihlasen
 	echo $data_tbl->get_info_row('Není nikdo kdo by nebyl přihlášen.')."\n";
@@ -464,21 +655,62 @@ echo $data_tbl->get_footer()."\n";
 </form>
 
 <script>
-//vlozeni checkboxu pro vyber kategorii, kterym se budou menit platby
-var ckbx = document.getElementById("ckbx-cat");
-var cats = <?php echo json_encode($arr_kat); ?>;
-console.log(cats);
+// vlozeni vsech checkboxu do pripravenych divu
+<?php
 
-//vlozeni checkboxu do pripraveneho divu
-jQuery.each( cats, function( index, value ) {
-	ckbx.innerHTML += value+"<input type=\"checkbox\" class=\"ckbx-cat\" value=\"" + index + "\" id=\"ckbx-" + index + "\" /> ";
+	foreach ($checkBoxRows as $key => $checkBoxRow) {
+		echo 'var ckbx = document.querySelector("div.checkbox-row[data-key='.$key.']");'."\n";
+		echo 'ckbx.innerHTML = '. json_encode($checkBoxRow->render(), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . ";\n";
+	}
+
+?>
+
+// Handle click on "all" → toggle all "one"
+document.querySelectorAll("input[type=checkbox][data-role='all']").forEach(allBox => {
+    allBox.addEventListener("click", function() {
+        const checked = this.checked;
+
+        this.closest(".checkbox-row").querySelectorAll("input[type=checkbox]")
+            .forEach(box => {
+                if ( box != this ) box.checked = checked;
+            });
+		updateRows(markSelected);
+    });
 });
 
-//pri kliku na jednu kategorii se odznaci Vse
-$("INPUT[type='checkbox'][class='ckbx-cat']").click( function() {
-	$("#all-ckbx").prop('checked', false); 
+// Handle click on "one" → maybe update "all"
+document.querySelectorAll("input[type=checkbox][data-role='one']").forEach(oneBox => {
+    oneBox.addEventListener("click", function() {
+        const allBox = this.closest(".checkbox-row").querySelector("input[type=checkbox][data-role='all']");
+
+        if (allBox) { // only if "all" exists
+			if (this.checked) {
+				// if all "one" are checked, "all" might be checked
+            	const allOnes = this.closest(".checkbox-row").querySelectorAll("input[type=checkbox][data-role='one']");
+            	const allChecked = Array.from(allOnes).every(cb => cb.checked);
+        		allBox.checked = allChecked;
+			} else {
+				// if one is unchecked, "all" must be unchecked
+				allBox.checked = false;
+			}
+		}
+		updateRows(markSelected);
+    });
 });
 
-$("INPUT[type='checkbox'][class='ckbx-fintype']").click( function() {
-	$("#all-fintype").prop('checked', false); 
-});</script>
+// make rows pinnable
+document.querySelectorAll("td .state").forEach(span => {
+
+  span.addEventListener("click", function () {
+	if (this.classList.contains("unpinned")) {
+      // unpinned → pinned
+      this.className = "state pinned";
+    } else {
+      // selected/pinned → unpinned
+      this.className = "state unpinned";
+      this.textContent = "📌";
+    }
+  });
+});
+
+</script>
