@@ -76,7 +76,7 @@ function isValidDate(subject)
 	// Idea for new code taken from :
 	// Original JavaScript code by Chirp Internet: www.chirp.com.au
 	// Please acknowledge use of this code by including this header.
- 
+
 	var minYear = 1902;
 
 	// regular expression to match required date format
@@ -92,20 +92,20 @@ function isValidDate(subject)
 			return false;
 		else
 			return true;
-	} 
+	}
 	return false;
 }
 
 function isValidLogin(subject)
 {
-  if (subject.match(/^[[a-zA-Z/._-][a-zA-Z0-9/._-]*$/)) // prvni znak neni cislo
-  { 
-    return true;
-  }
+	if (subject.match(/^[[a-zA-Z/._-][a-zA-Z0-9/._-]*$/)) // prvni znak neni cislo
+	{
+		return true;
+	}
   else
   {
-    return false;
-  }
+		return false;
+	}
 }
 
 function isPositiveNumber(subject)
@@ -133,10 +133,10 @@ function changeParameterValueInURL(currentUrl, parameter, value)
 }
 
 function toggle_display_by_class(cls) {
-    var lst = document.getElementsByClassName(cls);
+	var lst = document.getElementsByClassName(cls);
     for(var i = 0; i < lst.length; ++i) {
         (lst[i].style.display == '')?(lst[i].style.display='none'):(lst[i].style.display='');
-    }
+	}
 }
 
 function toggleDisplayByToggleClass(cls) {
@@ -148,11 +148,21 @@ function toggleDisplayByToggleClass(cls) {
 
 function toggleDisplayByData(key,value) {
 
-    var lst = document.querySelectorAll('[' + key + '="' + value + '"]');
+	var lst = document.querySelectorAll('[' + key + '="' + value + '"]');
 
 	for(var i = 0; i < lst.length; ++i) {
         (lst[i].style.display == '')?(lst[i].style.display='none'):(lst[i].style.display='');
-    }
+	}
+}
+
+
+/*
+  Functions for finance tables - start
+*/
+
+function setSelectedState(selector, state) {
+	selector.className = "state " + state;
+	selector.textContent = (state === "selected") ? "✔" : "📌";
 }
 
 function getCheckedIds (key) {
@@ -168,34 +178,229 @@ function getCheckedIds (key) {
 
 }
 
+// modify all rows with selector, lambda function parameters are row, element with selector class and current state
+function updateRowsByState(rowModifier) {
+	const selectors = document.querySelectorAll('tr td .state');
+
+	selectors.forEach(selector => {
+		row = selector.closest("tr");
+		const state = Array.from(selector.classList).find(c => c !== "state");
+		rowModifier(row, selector, state);
+	});
+}
+
 function updateRows(rowModifier) {
 
-  // Collect all checkbox groups
-  const groups = {};
-  document.querySelectorAll("div.checkbox-row[data-key]").forEach(div => {
-    const key = div.dataset.key; // e.g. "fintype", "kat", ...
-    groups[key] = getCheckedIds(key); // Set or null
-  });
+	// Collect all checkbox groups
+	const groups = {};
+	document.querySelectorAll("div.checkbox-row[data-key]").forEach(div => {
+		const key = div.dataset.key; // e.g. "fintype", "kat", ...
+		groups[key] = getCheckedIds(key); // Set or null
+	});
 
- // Build selector: rows with at least one data-* attribute defined
-  const selector = Object.keys(groups)
-    .map(key => `[data-${key}]`)
-    .join(",");
-  console.log("Selector:", selector);
+	// Build selector: rows with at least one data-* attribute defined
+	const selector = Object.keys(groups)
+		.map(key => `[data-${key}]`)
+		.join(",");
 
-  const rows = document.querySelectorAll('tr' + selector);
-  console.log("Rows:", rows.length);
-  
-  rows.forEach(row => {
-	match = true;
+	const rows = document.querySelectorAll('tr' + selector);
 
-	for (const [key, checkedTypes] of Object.entries(groups)) {
-		if ( row.dataset[key] ) { // only if the row has this data-key attribute
-			if ( !checkedTypes )  { match = false; break; } // no value selected for this key
-			if ( !checkedTypes.has(row.dataset[key]) ) { match = false; break; } // not in the filter
+	rows.forEach(row => {
+		match = true;
+
+		for (const [key, checkedTypes] of Object.entries(groups)) {
+			if ( row.dataset[key] ) { // only if the row has this data-key attribute
+				if ( !checkedTypes )  { match = false; break; } // no value selected for this key
+				if ( !checkedTypes.has(row.dataset[key]) ) { match = false; break; } // not in the filter
+			}
 		}
+
+		rowModifier(row, match);
+	});
+}
+
+const financialState = new Map(); // change tracking for rollback
+
+function addStateValue(row, colName, newVal) {
+  if (!financialState.has(row)) {
+    financialState.set(row, {});
+  }
+  const rowObj = financialState.get(row);
+
+  rowObj[colName] = (rowObj[colName] || 0) + Number(newVal);
+}
+
+function swapStateValue(row, colName, newVal) {
+  if (!financialState.has(row)) {
+    financialState.set(row, {});
+  }
+  const rowObj = financialState.get(row);
+
+  let prevValue = (rowObj[colName] || 0);
+
+  // set new value
+  rowObj[colName] = Number(newVal);
+
+  // return the previous one
+  return prevValue;
+}
+
+function fillFinanceRow( row, perform, values ) {
+	// update row values
+	let addNote = [];
+	let addAmount = 0;
+	let noteField = null;
+	let amountField = null;
+	let clearRegex = new Set(); // list of keys removed from note
+
+	const colTextMap = {
+		entryFee: 'startovné',
+		transport: 'doprava',
+		accommodation: 'ubytování'
+		};
+
+	row.querySelectorAll('[data-col]').forEach(cell => {
+		const colName = cell.dataset.col;
+		if (values.hasOwnProperty(colName)) {
+			if (colName === 'amount') amountField = cell; // remember amount cell
+			if (colName === 'note') noteField = cell; // remember note cell
+			const newVal = values[colName];
+			let addVal = ''; // value in add format
+			if ( newVal == null ) addVal = '';
+			else if (!isNaN(newVal)) addVal = (Number(newVal) >= 0 ? "+" : "") + Number(newVal);
+			else addVal = '/' + newVal;
+
+			// Only update if no data-fill OR data-fill == "1"
+			if ((!cell.dataset.fill || cell.dataset.fill === "1") ) {
+				switch (perform) {
+					case 'overwrite': // přepiš
+						if ( newVal !== '' ) { // null or set							
+							if (cell.tagName === "INPUT" || cell.tagName === "TEXTAREA") {
+								cell.value = newVal;
+							} else {
+								if ( cell.dataset.fill ) {
+									cell.textContent = '✔' + addVal;
+								} else {
+									cell.textContent = newVal;
+								}
+							}
+							if ( colTextMap[colName]) {						
+								if ( newVal ) {
+									// effective value
+									addNote.push(addVal + ' ' + colTextMap[colName]);
+									addAmount += Number(newVal); // add new
+								}
+								addAmount -= swapStateValue ( row, colName, newVal ); // remove old and save new
+								clearRegex.add(colTextMap[colName]); // mark remove from note
+							}
+						}
+						break;
+
+					case 'insert': // vlož
+					    if ( newVal ) {
+							let wasEmpty = false;
+							if (cell.tagName === "INPUT" || cell.tagName === "TEXTAREA") {
+								if ( !cell.value.trim() ) {
+									wasEmpty = true;
+									cell.value = newVal;
+								}								
+							} else {
+								if ( cell.dataset.fill ) {
+									if ( cell.textContent === '✔' ) {
+										wasEmpty = true;
+										cell.textContent = '✔' + addVal;
+									}
+								} else {
+									if ( !cell.textContent.trim() ) {
+										wasEmpty = true;
+										cell.textContent = newVal;
+									}
+								}
+							}
+							if (wasEmpty && colTextMap[colName]) {
+								addNote.push(addVal + ' ' + colTextMap[colName]);
+								addStateValue(row, colName, newVal); // save new
+								addAmount += Number(newVal); // add new
+							}
+						}
+						break;
+
+					case 'add': // přidej
+					    if ( newVal ) {
+							if (cell.tagName === "INPUT" || cell.tagName === "TEXTAREA") {
+								if (colName === 'amount') {
+									if ( !isNaN ( cell.value ) ) cell.value = Number(cell.value) + Number ( newVal );
+								} else {
+									if (!cell.value.trim()) cell.value = newVal; else cell.value += addVal;
+								}
+							} else {
+								if (!cell.textContent.trim()) cell.textContent = newVal; else cell.textContent += addVal;
+							}
+							if (colTextMap[colName]) {
+								addNote.push(addVal  + ' ' + colTextMap[colName]);
+								addStateValue ( row, colName, newVal); // save added
+								addAmount += Number(newVal); // add added
+							}
+						}
+						break;
+
+					default:
+					// do nothing
+				}
+			}
+		}
+	});
+
+	if ( noteField && clearRegex.size > 0 ) {
+		let noteText = noteField.value;
+		for (const value of clearRegex ) {
+			const regex = new RegExp('[+-]?\\d+\\s*' + value, "g");
+			noteText = noteText.replaceAll( regex, '' );
+		}
+		noteField.value = noteText;
+	}
+	if (noteField && addNote.length > 0) {
+		noteField.value = noteField.value + addNote.join('');
+	}
+	if (amountField && addAmount) {
+		amountField.value = Number(amountField.value) + addAmount;
 	}
 
-    rowModifier(row, match);
-  });
 }
+
+function fillTableFromInput(perform, event) {
+	// prevent form submission
+	event.preventDefault();
+
+	// collect input values
+	const values = {};
+	document.querySelectorAll(".form-row [id^='in-']")
+		.forEach(input => {
+			const key = input.id.substring(3); // remove "in-"
+			if (key.endsWith("-null")) {
+				if (input.classList.contains("pinned")) {
+					// null marker → set corresponding value to null
+					const baseKey = key.slice(0, -5); // cut off "-null"
+					values[baseKey] = null;
+				}
+			} else {
+				// only set if not already set (to avoid overwriting null)
+				if (!(key in values)) {
+					values[key] = input.value;
+				}
+			}
+		}
+	);
+
+	document.querySelectorAll("tr td .state")
+		.forEach(input => {
+			if (input.classList.contains("selected") || input.classList.contains("pinned")) {
+				row = input.closest("tr");
+				fillFinanceRow(row,perform,values);
+			}
+		});
+};
+
+/*
+  Functions for finance tables - end
+*/

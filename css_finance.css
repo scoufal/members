@@ -42,6 +42,7 @@ div.form-field {
 .state {
 	cursor: pointer;
 	user-select: none;
+	vertical-align: middle;
 }
 .unpinned {
 	opacity: 0.3;   /* faded */

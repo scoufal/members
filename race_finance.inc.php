@@ -242,7 +242,6 @@ class CheckboxRow {
                 continue;
             }
 
-            $html .= empty($entry['label']) ? '(None)' : htmlspecialchars($entry['label']);
             $html .= '<input type="checkbox" data-role="one" data-key="' . htmlspecialchars($this->key) . '" value="' . $entry['id'] . '"';
             if (!empty($entry['title'])) {
                 $html .= ' title="' . htmlspecialchars($entry['title']) . '"';
@@ -251,6 +250,7 @@ class CheckboxRow {
                 $html .= ' checked';
             }
             $html .= '>';
+            $html .= empty($entry['label']) ? '(None)' : htmlspecialchars($entry['label']);
 		}
 
 		return $html;
@@ -296,112 +296,78 @@ if ($enable_fin_types) {
 	else {
 
 		$cbr = new CheckboxRow ( 'Typ o.p.', 'fintype' );
-		$cbr->addEntry('-', 'Není definováno', 0, false, false); // null value represented by -
+		$cbr->addEntry('-', 'Není definováno', 0, true, false); // null value represented by -
 
 		while ($zaznam=mysqli_fetch_array($fintypes))
 		{
-			$cbr->addEntry($zaznam['nazev'],$zaznam['popis'],$zaznam['id'],false,false);
+			$cbr->addEntry($zaznam['nazev'],$zaznam['popis'],$zaznam['id'],true,false);
 		}
 		$checkBoxRows['fintype'] = $cbr;
 	}
-}?>
+}
+
+/**
+ * Render a form field with optional attributes and types.
+ *
+ * @param string $column The id/column name of the input
+ * @param string $label  The visible label text
+ * @param string $type   Input type (text, number, etc.)
+ * @param string $options Optional additional HTML attributes
+ */
+function renderFormField(string $column, string $label, string $type = 'text', string $options = ''): string {
+    return '<div class="form-field">'
+         . '<label for="in-' . htmlspecialchars($column) . '">' . htmlspecialchars($label) . '</label>'
+         . '<div><input type="' . htmlspecialchars($type) . '" id="in-' . htmlspecialchars($column) . '" ' . $options . ' />'
+		 . '&nbsp;<span class="state unpinned" id="in-' . htmlspecialchars($column) . '-null" title="Vymazat hodnotu">✖</span></div>'
+         . '</div>';
+}
+
+?>
 <div class="form-row">
+<?php
+  echo renderFormField ( 'amount', 'Částka', 'number', 'size="6"');
+  echo renderFormField ( 'note', 'Poznámka', 'text');
+  echo renderFormField ( 'entryFee', 'Startovné', 'text', 'size="3" inputmode="numeric" pattern="\d*"');
+  echo renderFormField ( 'transport', 'Doprava', 'text', 'size="3" inputmode="numeric" pattern="\d*"');
+  echo renderFormField ( 'accommodation', 'Ubytování', 'text', 'size="3" inputmode="numeric" pattern="\d*"');
+?>
   <div class="form-field">
-    <label for="in-amount">Částka</label>
-    <input type="number" id="in-amount" size="6" />
-  </div>
-
-  <div class="form-field">
-    <label for="in-note">Poznámka</label>
-    <input type="text" id="in-note" />
-  </div>
-
-  <div class="form-field">
-    <label for="entry-fee">Startovné</label>
-    <input type="text" id="entry-fee" size="3" inputmode="numeric" pattern="\d*"/>
-  </div>
-
-  <div class="form-field">
-    <label for="transport">Doprava</label>
-    <input type="text" id="transport" size="3" inputmode="numeric" pattern="\d*"/>
-  </div>
-
-  <div class="form-field">
-    <label for="accommodation">Ubytování</label>
-    <input type="text" id="accommodation" size="3" inputmode="numeric" pattern="\d*"/>
+	&nbsp;<br/>
+	<button onclick="fillTableFromInput('overwrite',event)" title="Vložení hodnot do vybraných řádků">Přepiš</button><br/>
   </div>
   <div class="form-field">
 	&nbsp;<br/>
-	<button onclick="fillInputsByCategory()" title="Vložení hodnot do vybraných řádků">Přepiš</button><br/>
+	<button onclick="fillTableFromInput('insert',event)" title="Vložení hodnot pokud není vyplněna částka">Vlož</button><br/>
   </div>
   <div class="form-field">
 	&nbsp;<br/>
-	<button onclick="fillInputsByCategory()" title="Vložení hodnot pokud není vyplněna částka">Vlož</button><br/>
+	<button onclick="fillTableFromInput('add',event)" title="Přičtení hodnot, poznámky odděleny /">Přidej</button><br/>
   </div>
-  <div class="form-field">
-	&nbsp;<br/>
-	<button onclick="fillInputsByCategory()" title="Přičtení hodnot, poznámky odděleny /">Přidej</button><br/>
+<div class="form-field" style="margin-left: 10em">
+	&nbsp;<br/><button 
+	onclick="updateRowsByState((row, marker, state) => {
+		if (state === 'selected') setSelectedState ( marker, 'pinned'); })" 
+	title="Připnutí vybraných řádků">Připnout vybrané</button>
   </div>
+<div class="form-field">
+   &nbsp;<br/><button 	onclick="updateRowsByState((row, marker, state) => {
+		if (state !== 'unpinned') setSelectedState ( marker, 'unpinned'); })"
+	 title="Odepnout všechny řádky">Odepnout všechny</button><br/>
+</div>
 </div>
 </div>
 
 <script>
 
-const markSelected = (row, match) => {
+function markSelected (row, match) {
   const span = row.querySelector("td .state");
   if (!span) return;
 
   // if not pinned, force state = selected/unpinned
   if (!span.classList.contains("pinned")) {
-	if ( match ) {
-		span.className = "state selected";
-		span.textContent = "✔";
-	} else {
-		span.className = "state unpinned";
-		span.textContent = "📌";
-	}
+	setSelectedState ( span, match ? "selected" : "unpinned" );
   }
 };
-
-//naplni amount a note hodnotama z inputu in-amount a in-note
-function fillInputsByCategory() {
-	var kat = $("#in-kat").val();
-	var amount = $("#in-amount").val();
-	var note = $("#in-note").val();
-
-	jQuery.each( cats, function( index, value ) {
-		if ($('#ckbx-'+index).is(':checked')) {
-			let elem = $("input.amount-"+index);
-			if (!$( elem ).hasClass("hidden")) {
-				$( elem ).val(amount);
-				$("input.note-"+index).val(note);
-			}
-		}
-
-	});
-
-	var start = $("#entry-fee").val(); // jQuery value
-	var transport = $("#transport").val(); // jQuery value
-	var acc = $("#accommodation").val(); // jQuery value
-
-	updateRows((row, match) => {
-	if (match) {
-		if (start) {
-			const cell = row.querySelector("[data-col='start']");
-			if (cell) cell.textContent = start;
-		}
-		if (transport) {
-			const cell = row.querySelector("[data-col='trans']");
-			if (cell) cell.textContent = transport;
-		}
-		if (acc) {
-			const cell = row.querySelector("[data-col='acc']");
-			if (cell) cell.textContent = acc;
-		}
-	}
-	});
-
-}
 
 </script>
 
@@ -460,13 +426,13 @@ while ($zaznam=mysqli_fetch_assoc($vysledek_all))
 	$amount = $zaznam['amount'];
 	$amount>0?$sum_plus_amount+=$amount:$sum_minus_amount+=$amount;
 	
-	$input_amount = '<input class="amount" type="number" id="am'.$i.'" name="am'.$i.'" value="'.$amount.'" size="5" maxlength="10" />';
+	$input_amount = '<input class="amount" type="number" id="am'.$i.'" name="am'.$i.'" value="'.$amount.'" size="5" maxlength="10" data-col="amount" data-init="'.$amount.'" />';
 	$row[] = $input_amount;
 	
 	$note = $zaznam['note'];
-	$input_note = '<input class="note" type="text" id="nt'.$i.'" name="nt'.$i.'" value="'.$note.'" size="40" maxlength="200" />';
+	$input_note = '<input class="note" type="text" id="nt'.$i.'" name="nt'.$i.'" value="'.$note.'" size="40" maxlength="200" data-col="note" data-init="'.$note.'" />';
 	$row[] = $input_note;
-	
+
 	$row[] = '<input type="text" class="cat" id="cat'.$i.'" name="cat'.$i.'" size="6" maxlength="10" value="'.$kat.'" />';
 	if ($enable_fin_types) {
 		$fintype = $zaznam['finance_type'] ?? '0'; 
@@ -482,23 +448,21 @@ while ($zaznam=mysqli_fetch_assoc($vysledek_all))
 	}
 
 	// startovne
-	$row[] = '<span data-col="start"></span>';
+	$row[] = '<span data-col="entryFee" data-init="0"></span>';
 
 	if ($g_enable_race_transport)
 	{
 		$trans=$zaznam['transport']==1?"&#x2714;":"&nbsp;";
-		$row[] = "<span data-col='trans'>".$trans."</span>";
+		$row[] = "<span data-col='transport' data-init='0' data-fill='".(($zaznam['transport']==1)?"1":"0")."'>".$trans."</span>";
 	}
 	if ($g_enable_race_accommodation)
 	{
 		$ubyt=$zaznam['ubytovani']==1?"&#x2714;":"&nbsp;";
-		$row[] = "<span data-col='acc'>".$ubyt."</span>";
+		$row[] = "<span data-col='accommodation' data-init='0' data-fill='".(($zaznam['ubytovani']==1)?"1":"0")."'>".$ubyt."</span>";
 	}
 	$row[] = ($zaznam['participated'] ? 'A' : '').($zaznam['add_by_fin'] ? 'F' : '');
 
-	$row_class = "cat-".$kat_id." ".($zaznam['participated'] ? 'participated ' : 'notParticipated ').($zaznam['add_by_fin'] ? 'addByFin ' : 'addByUser ');
-
-	$attrs = [ 'class' => $row_class, 'data-cat' => $kat_id, 
+	$attrs = [ 'class' => 'cat', 'data-cat' => $kat_id, 
 	    'data-participated' => $zaznam['participated']??0,
 		'data-addByFin' => $zaznam['add_by_fin']??0,
 		'data-fintype' => $zaznam['finance_type']??0,
@@ -524,7 +488,7 @@ do  {
 
 	if ( !empty ( $ext_id ) && $connector!== null ) {
 		$kat = getOrisClass($zaznam['reg']);
-		$kat_id = $checkBoxRows['cat']->addEntry($kat,null,null,true,true);
+		$kat_id = $checkBoxRows['cat']->addEntry($kat,null,null,false,true);
 		$attrs['data-cat'] = $kat_id;
 	}
 
@@ -536,16 +500,16 @@ do  {
 
 	$amount = $zaznam['amount'];
 	$amount>0?$sum_plus_amount+=$amount:$sum_minus_amount+=$amount;
-	
-	$input_amount = '<input type="number" id="am'.$i.'" name="am'.$i.'" value="'.$amount.'" size="5" maxlength="10" />';
+
+	$input_amount = '<input type="number" id="am'.$i.'" name="am'.$i.'" value="'.$amount.'" size="5" maxlength="10" data-col="amount" data-init="'.$amount.'" />';
 	$row[] = $input_amount;
 	
 	$note = $zaznam['note'];
-	$input_note = '<input type="text" id="nt'.$i.'" name="nt'.$i.'" value="'.$note.'" size="40" maxlength="200" />';
+	$input_note = '<input type="text" id="nt'.$i.'" name="nt'.$i.'" value="'.$note.'" size="40" maxlength="200" data-col="note" data-init="'.$note.'" />';
 	$row[] = $input_note;
 
 	if ( !empty ( $ext_id ) && $connector!== null ) {
-		$row[] = '<input type="text" class="cat" id="cat'.$i.'" name="cat'.$i.'" size="6" maxlength="10" value="'.$kat.'" readonly/>';
+		$row[] = $kat;
 	}
 
 	if ($enable_fin_types) {
@@ -562,15 +526,7 @@ do  {
 	}
 
 	// startovne
-	$row[] = '<span data-col="start"></span>';	
-	if ($g_enable_race_transport)
-	{
-		$row[] = "<span data-col='trans'></span>";
-	}
-	if ($g_enable_race_accommodation)
-	{
-		$row[] = "<span data-col='acc'></span>";
-	}
+	$row[] = '<span data-col="entryFee" data-init="0"></span>';	
 
 	echo $data_tbl->get_new_row_arr($row, $attrs)."\n";
 
@@ -616,11 +572,11 @@ do {
 	$row[] = "<A href=\"javascript:open_win('./view_address.php?id=".$zaznam["u_id"]."','')\" class=\"adr_name\">".$zaznam['sort_name']."</A>";
 	
 	$amount = $zaznam['amount'];
-	$input_amount = '<input type="number" id="am'.$i.'" name="am'.$i.'" value="'.$amount.'" size="5" maxlength="10" />';
+	$input_amount = '<input type="number" id="am'.$i.'" name="am'.$i.'" value="'.$amount.'" size="5" maxlength="10" data-col="amount" data-init="'.$amount.'" />';
 	$row[] = $input_amount;
 	
 	$note = $zaznam['note'];
-	$input_note = '<input type="text" id="nt'.$i.'" name="nt'.$i.'" value="'.$note.'" size="40" maxlength="200" />';
+	$input_note = '<input type="text" id="nt'.$i.'" name="nt'.$i.'" value="'.$note.'" size="40" maxlength="200" data-col="note" data-init="'.$note.'" />';
 	$row[] = $input_note;
 	
 	$row[] = $zaznam['kat'];
@@ -637,6 +593,9 @@ do {
 	if ( !empty ( $ext_id ) && $connector!== null ) {
 		$row[] = getOrisFee($zaznam['reg']);
 	}
+
+	// startovne
+	$row[] = '<span data-col="entryFee" data-init="0"></span>';	
 
 	echo $data_tbl->get_new_row_arr($row,$attrs)."\n";
 	$i++;
@@ -709,6 +668,23 @@ document.querySelectorAll("td .state").forEach(span => {
       // selected/pinned → unpinned
       this.className = "state unpinned";
       this.textContent = "📌";
+    }
+  });
+});
+
+// make values sweepable, use the same class as pinned-unpinned
+document.querySelectorAll(".form-field .state").forEach(span => {
+
+  span.addEventListener("click", function () {
+	const cell = document.getElementById(this.id.slice(0, -5));
+	if (this.classList.contains("unpinned")) {
+	    // uncrossed → crossed
+		this.className = "state pinned";
+		if (cell) { cell.value = ''; cell.disabled = true; }
+    } else {
+		// crossed → ucrossed
+		this.className = "state unpinned";
+		if (cell) { cell.disabled = false; }
     }
   });
 });
