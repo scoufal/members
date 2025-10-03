@@ -40,8 +40,8 @@ $g_racetype0_cnt = count($g_racetype0_idx);
 
 // Typy plateb
 $g_payement_type = [
-	'N' => 'navíc',
-	'P' => 'poměr',
+	'C' => 'celá',
+	'P' => 'pevná',
 	'R' => 'rozdíl',
 ];
 
