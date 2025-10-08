@@ -160,6 +160,42 @@ function toggleDisplayByData(key,value) {
   Functions for finance tables - start
 */
 
+function initCheckboxGroups(changePostprocessing = null) {
+
+	// Handle click on "all" → toggle all "one"
+	document.querySelectorAll("input[type=checkbox][data-role='all']").forEach(allBox => {
+		allBox.addEventListener("click", function() {
+			const checked = this.checked;
+
+			this.closest(".checkbox-row").querySelectorAll("input[type=checkbox]")
+				.forEach(box => {
+					if ( box != this ) box.checked = checked;
+				});
+			if ( changePostprocessing ) updateRows(changePostprocessing);
+		});
+	});
+
+	// Handle click on "one" → maybe update "all"
+	document.querySelectorAll("input[type=checkbox][data-role='one']").forEach(oneBox => {
+		oneBox.addEventListener("click", function() {
+			const allBox = this.closest(".checkbox-row").querySelector("input[type=checkbox][data-role='all']");
+
+			if (allBox) { // only if "all" exists
+				if (this.checked) {
+					// if all "one" are checked, "all" might be checked
+					const allOnes = this.closest(".checkbox-row").querySelectorAll("input[type=checkbox][data-role='one']");
+					const allChecked = Array.from(allOnes).every(cb => cb.checked);
+					allBox.checked = allChecked;
+				} else {
+					// if one is unchecked, "all" must be unchecked
+					allBox.checked = false;
+				}
+			}
+			if ( changePostprocessing ) updateRows(changePostprocessing);
+		});
+	});
+}
+
 function setSelectedState(selector, state) {
 	selector.className = "state " + state;
 	selector.textContent = (state === "selected") ? "✔" : "📌";

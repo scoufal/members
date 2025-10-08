@@ -13,19 +13,13 @@ function confirm_delete() {
 </script><?
 
 require_once ('./common_race.inc.php');
-
-$payementKeys = [
-    ['typ', 'Sport'],
-    ['typ0', 'Typ akce'],
-    ['termin', 'Termín'],
-    ['zebricek', 'Žebříček'],
-];
+require_once ('./common_fin.inc.php');
 
 $configured = []; // all payements in tree
 
 function payementRow ( $field, $nazev ) {
 
-	global $configured;
+	global $configured, $g_payrule_keys;
 
 	$row = array();
 	$row[] = '';
@@ -35,7 +29,7 @@ function payementRow ( $field, $nazev ) {
 
 	foreach ( $configured as $key => $config ) {
 
-		$firstconfig = $config[array_key_first($config)];
+		$firstconfig = reset($config);
 		$val = $firstconfig[$field]; // any first record in array
 		switch ( $field ) {
 			case 'typ' : $row[] = GetRaceTypeName ($val); break;
@@ -50,7 +44,14 @@ function payementRow ( $field, $nazev ) {
 $query = "SELECT * FROM ".TBL_FINANCE_TYPES.' ORDER BY id';
 @$vysledek=query_db($query);
 
-$query = "SELECT * FROM ".TBL_PAYRULES.' ORDER BY id';
+$query = "SELECT * FROM ".TBL_PAYRULES.' ORDER BY ';
+
+$comma = '';
+foreach ( $g_payrule_keys as [$key,$label] ) {
+	$query .= $comma . $key;
+	$comma = ',';
+}
+
 @$platby=query_db($query);
 
 if ($vysledek === FALSE || $platby == FALSE )
@@ -66,7 +67,7 @@ else
 		while ($zaznam=mysqli_fetch_array($platby))
 		{
 			$key = '';
-			foreach ($payementKeys as $payKey) {
+			foreach ($g_payrule_keys as $payKey) {
 				$key .=  $payKey[0] . '=' . $zaznam[$payKey[0]] ?? '';
 			}
 			$configured[$key][$zaznam['finance_type']] = $zaznam;
@@ -78,16 +79,22 @@ else
 		$data_tbl->set_header_col($col++,'Název',ALIGN_LEFT);
 		$data_tbl->set_header_col($col++,'Popis',ALIGN_LEFT);
 		$data_tbl->set_header_col($col++,'Možnosti',ALIGN_CENTER);
-		foreach ( $configured as $any ) {
-			$data_tbl->set_header_col($col++,'<A HREF="./fin_payement_edit.php?ids='.''.'" title="Editovat platby">&#9997;</A>&nbsp;/&nbsp;<A HREF="./fin_payement_del_exc.php?ids='.''.'" onclick="return confirm_delete()" class="Erase" title="Smazat platby">&#10799;</A>',ALIGN_CENTER);
+		foreach ( $configured as $records ) {
+			if ( array_key_exists ('', $records) ) {
+				// generic type configuration in column
+				$id = $records['']['id'];
+				$data_tbl->set_header_col($col++,'<A HREF="./fin_payrule_edit.php?id='.$id.'" title="Editovat platby">&#9997;</A>&nbsp;/&nbsp;<A HREF="./fin_payement_del_exc.php?id='.$id.'" onclick="return confirm_delete()" class="Erase" title="Smazat platby">&#10799;</A>',ALIGN_CENTER);
+			} else {
+				$data_tbl->set_header_col($col++, '',ALIGN_CENTER);
+			}
 		}
-		$data_tbl->set_header_col($col++,'<A HREF="./fin_payement_edit.php?new" title="Přidat platby">+</A>',ALIGN_CENTER);
+		$data_tbl->set_header_col($col++,'<A HREF="./fin_payrule_edit.php?new" title="Přidat platby">+</A>',ALIGN_CENTER);
 
 		echo $data_tbl->get_css()."\n";
 		echo $data_tbl->get_header()."\n";
 		echo $data_tbl->get_header_row()."\n";
 
-		foreach ($payementKeys as [$key, $label]) {
+		foreach ($g_payrule_keys as [$key, $label]) {
 			echo $data_tbl->get_new_row_arr(payementRow($key, $label));
 		}
 
@@ -111,6 +118,10 @@ else
 						case 'R' : $val = "&Delta; ";                     // of difference
 						default :
 							$val .= $typedconfig['pomer_platby'] * 100 . '%'; // % of diference or whole
+					}				
+					if ( array_key_exists ( $zaznam['id'], $config) ) {
+						// multiple types, in place edit
+						$val = '<A HREF="./fin_payrule_edit.php?id='.$typedconfig['id'].'" title="Editovat">' .$val . '</A>&nbsp;/&nbsp;<A HREF="./fin_payrule_del_exc.php?id='.$typedconfig['id'].'" onclick="return confirm_delete()" class="Erase" title="Smazat">&#10799;</A>';
 					}
 				}
 

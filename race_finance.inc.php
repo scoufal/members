@@ -498,6 +498,9 @@ echo $data_tbl->get_footer()."\n";
 </form>
 
 <script>
+
+document.addEventListener("DOMContentLoaded", () => {
+	
 // vlozeni vsech checkboxu do pripravenych divu
 <?php
 
@@ -507,70 +510,40 @@ echo $data_tbl->get_footer()."\n";
 	}
 
 ?>
+	// init the all buttons
+	initCheckboxGroups(markSelected);
 
-// Handle click on "all" → toggle all "one"
-document.querySelectorAll("input[type=checkbox][data-role='all']").forEach(allBox => {
-    allBox.addEventListener("click", function() {
-        const checked = this.checked;
+	// make rows pinnable
+	document.querySelectorAll("td .state").forEach(span => {
 
-        this.closest(".checkbox-row").querySelectorAll("input[type=checkbox]")
-            .forEach(box => {
-                if ( box != this ) box.checked = checked;
-            });
-		updateRows(markSelected);
-    });
-});
-
-// Handle click on "one" → maybe update "all"
-document.querySelectorAll("input[type=checkbox][data-role='one']").forEach(oneBox => {
-    oneBox.addEventListener("click", function() {
-        const allBox = this.closest(".checkbox-row").querySelector("input[type=checkbox][data-role='all']");
-
-        if (allBox) { // only if "all" exists
-			if (this.checked) {
-				// if all "one" are checked, "all" might be checked
-            	const allOnes = this.closest(".checkbox-row").querySelectorAll("input[type=checkbox][data-role='one']");
-            	const allChecked = Array.from(allOnes).every(cb => cb.checked);
-        		allBox.checked = allChecked;
-			} else {
-				// if one is unchecked, "all" must be unchecked
-				allBox.checked = false;
-			}
-		}
-		updateRows(markSelected);
-    });
-});
-
-// make rows pinnable
-document.querySelectorAll("td .state").forEach(span => {
-
-  span.addEventListener("click", function () {
-	if (this.classList.contains("unpinned")) {
-      // unpinned → pinned
-      this.className = "state pinned";
-    } else {
-      // selected/pinned → unpinned
-      this.className = "state unpinned";
-      this.textContent = "📌";
-    }
-  });
-});
-
-// make values sweepable, use the same class as pinned-unpinned
-document.querySelectorAll(".form-field .state").forEach(span => {
-
-  span.addEventListener("click", function () {
-	const cell = document.getElementById(this.id.slice(0, -5));
-	if (this.classList.contains("unpinned")) {
-	    // uncrossed → crossed
+	span.addEventListener("click", function () {
+		if (this.classList.contains("unpinned")) {
+		// unpinned → pinned
 		this.className = "state pinned";
-		if (cell) { cell.value = ''; cell.disabled = true; }
-    } else {
-		// crossed → ucrossed
+		} else {
+		// selected/pinned → unpinned
 		this.className = "state unpinned";
-		if (cell) { cell.disabled = false; }
-    }
-  });
-});
+		this.textContent = "📌";
+		}
+	});
+	});
+
+	// make values sweepable, use the same class as pinned-unpinned
+	document.querySelectorAll(".form-field .state").forEach(span => {
+
+	span.addEventListener("click", function () {
+		const cell = document.getElementById(this.id.slice(0, -5));
+		if (this.classList.contains("unpinned")) {
+			// uncrossed → crossed
+			this.className = "state pinned";
+			if (cell) { cell.value = ''; cell.disabled = true; }
+		} else {
+			// crossed → ucrossed
+			this.className = "state unpinned";
+			if (cell) { cell.disabled = false; }
+		}
+	});
+	});
+ });
 
 </script>

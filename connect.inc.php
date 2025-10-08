@@ -64,4 +64,84 @@ function query_db($sql_query)
 	return $result;
 }
 
+///////////////////////////////////////////////////////////////////////////////
+// NEW prepared statement helper API
+///////////////////////////////////////////////////////////////////////////////
+
+/**
+ * Prepares an SQL statement.
+ * @param string $sql SQL with placeholders (?)
+ * @return mysqli_stmt|false
+ */
+function db_prepare($sql)
+{
+	global $db_conn;
+	try {
+		return $db_conn->prepare($sql);
+	} catch (mysqli_sql_exception $ex) {
+		LogToFile(dirname(__FILE__) . '/logs/.db_errors.txt', 'Db prepare error - ' . $ex->getMessage());
+		return false;
+	}
+}
+
+/**
+ * Executes a prepared statement with parameters.
+ * Automatically binds values and executes.
+ *
+ * @param string $sql SQL string with placeholders
+ * @param string $types e.g. "ssi" for string,string,int
+ * @param array $params Values to bind
+ * @return mysqli_result|bool
+ */
+function db_execute($sql, $types = '', array $params = [])
+{
+	global $db_conn;
+
+	try {
+		$stmt = $db_conn->prepare($sql);
+		if (!$stmt) {
+			throw new Exception("Prepare failed: " . $db_conn->error);
+		}
+
+		if ($types && $params) {
+			$stmt->bind_param($types, ...$params);
+		}
+
+		$stmt->execute();
+
+		// Return result or success
+		if (stripos($sql, 'SELECT') === 0) {
+			$result = $stmt->get_result();
+			$stmt->close();
+			return $result;
+		} else {
+			$affected = $stmt->affected_rows;
+			$stmt->close();
+			return $affected;
+		}
+	} catch (Throwable $ex) {
+		LogToFile(dirname(__FILE__) . '/logs/.db_errors.txt', 'Db execute error - ' . $ex->getMessage());
+		return false;
+	}
+}
+
+/**
+ * Simple helper for insert/update/delete (non-select).
+ * Usage: db_exec("UPDATE table SET x=? WHERE id=?", "si", [$x, $id]);
+ */
+function db_exec($sql, $types, array $params)
+{
+	return db_execute($sql, $types, $params);
+}
+
+/**
+ * Simple helper for select queries.
+ * Usage: $rows = db_select("SELECT * FROM table WHERE name=?", "s", [$name]);
+ */
+function db_select($sql, $types = '', array $params = [])
+{
+	$res = db_execute($sql, $types, $params);
+	if ($res === false) return [];
+	return $res->fetch_all(MYSQLI_ASSOC);
+}
 ?>

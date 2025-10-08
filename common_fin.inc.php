@@ -3,6 +3,15 @@
 
 require_once "cfg/race_enums.php";
 
+// payement keys - renderer, db
+$g_payrule_keys = [
+    ['typ', 'Sport'],
+    ['typ0', 'Typ akce'],
+    ['termin', 'Termín'],
+    ['zebricek', 'Žebříček'],
+];
+
+
 function CreateFinMailFlag(&$mflags)
 {
 	global $g_fin_mail_flag_cnt;
@@ -50,7 +59,8 @@ class CheckboxRow {
     private string $name;    // e.g. Kategorie
     private string $key;     // e.g. cat
 	private bool $hasAll;    // has all checkbox
-	private string $namePrefix; // generate input names if set
+	private bool $disabled;  // all entries unmodifiable
+	private ?string $namePrefix; // generate input names if set
     private array $entries = [];   // store added entries
 	private array $idToEntry = []; // loopback map id → label
 
@@ -59,12 +69,14 @@ class CheckboxRow {
 	 * @param string $name   Visible name
 	 * @param string $key    Unique key for HTML data-key attribute
 	 * @param bool   $hasAll Include "all" checkbox
+	 * @param bool   $disabled  Unmodifiable all entries
 	 */
-    public function __construct(string $name, string $key, bool $hasAll = true, string $namePrefix = null) {
+    public function __construct(string $name, string $key, bool $hasAll = true, string $namePrefix = null, bool $disabled = false) {
         $this->name = $name;
         $this->key  = $key;
 		$this->hasAll = $hasAll;
 		$this->namePrefix = $namePrefix;
+		$this->disabled = $disabled;
     }
 
     /**
@@ -133,16 +145,11 @@ class CheckboxRow {
      * Render innerHTML
      */
     public function render(): string {
-       $html = '';
+    	$html_pre = $this->name;
 
-        // top-level "all" checkbox
-        $html .= $this->name;
-		if ($this->hasAll) {
-	        $html .= '<input type="checkbox" data-role="all" data-key="' . htmlspecialchars($this->key) . '">&nbsp;=&gt;&nbsp;';
-		} else {
-			$html .= '&nbsp;:&nbsp;&nbsp;';
-		}
+ 		$all_checked = true;
 
+        $html = '';
 		$id = 0;
         foreach ($this->entries as $label => $entry) {
             // if activeIds filter is set, skip others
@@ -152,19 +159,44 @@ class CheckboxRow {
 
             $html .= '<input type="checkbox" data-role="one" data-key="' . htmlspecialchars($this->key) . '" value="' . $entry['id'] . '"';
 			if ( isset ($this->namePrefix) ) {
-				$html .= ' name="' . htmlspecialchars($this->namePrefix) . $id++ . '"';
+				$html .= ' name="' . htmlspecialchars($this->namePrefix) . '[]"';
+				$html .= ' id="' . htmlspecialchars($this->namePrefix) . '_' . $id++ . '"';
 			}
             if (!empty($entry['title'])) {
                 $html .= ' title="' . htmlspecialchars($entry['title']) . '"';
             }
             if ($entry['checked']) {
                 $html .= ' checked';
-            }
+            } else {
+				$all_checked = false;
+			}
+			if ( $this->disabled )
+				$html .= ' disabled';
             $html .= '>';
-            $html .= empty($entry['label']) ? '(None)' : htmlspecialchars($entry['label']);
+			if ( isset ($this->namePrefix) ) {
+	            $html .= '<label for="' . htmlspecialchars($this->namePrefix) . '_' . ($id - 1) . '">';
+			}
+			$html .= empty($entry['label']) ? '(None)' : htmlspecialchars($entry['label']);
+			if ( isset ($this->namePrefix) ) {
+ 				$html .= '</label>';
+			}
 		}
 
-		return $html;
+        // top-level "all" checkbox
+		if ($this->hasAll) {
+	        $html_pre .= '<input type="checkbox" data-role="all" data-key="' . htmlspecialchars($this->key) . '"';
+			if ( isset ($this->namePrefix) ) {
+				$html_pre .= ' name="' . htmlspecialchars($this->namePrefix) . '_all"';
+			};			
+			if ( $all_checked )
+				 $html_pre .= ' checked';
+			if ( $this->disabled )
+				$html_pre .= ' disabled';
+			$html_pre .= '>&nbsp;=&gt;&nbsp;&nbsp;';
+		}
+
+
+		return $html_pre . $html;
     }
 }
 
