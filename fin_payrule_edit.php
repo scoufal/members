@@ -14,18 +14,16 @@ require_once("cfg/_globals.php");
 require_once("cfg/race_enums.php");
 
 db_Connect();
-$is_new = array_key_exists('new',$_REQUEST);
 
-$id = (isset($id) && is_numeric($id)) ? (int)$id : 0;
+$id = (int)(filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT) ?? 0);
+$is_new = isset($_REQUEST['new']);
 
-$sql_query = 'SELECT * FROM '.TBL_FINANCE_TYPES;
-@$finTypes = query_db($sql_query);
+$finTypes = query_db("SELECT * FROM " . TBL_FINANCE_TYPES);
+$zaznam = null;
 
 if ( !$is_new ) {
-    $sql_query = 'SELECT * FROM '.TBL_PAYRULES.' WHERE id=' . $id;
-    @$vysledek = query_db($sql_query);
-
-    @$zaznam = mysqli_fetch_array($vysledek);
+    $res = query_db("SELECT * FROM " . TBL_PAYRULES . " WHERE id = $id");
+    $zaznam = mysqli_fetch_array($res);
 }
 
 require_once ("./header.inc.php");
@@ -33,133 +31,104 @@ require_once ("./common.inc.php");
 require_once ("./common_fin.inc.php");
 
 DrawPageTitle( ($is_new ? 'Nová' : 'Editace' ) . ' definice platby');
+/**
+ * Helper to render one checkbox row
+ */
+function renderCheckboxRow(string $label, CheckboxRow $cbr): void
+{
+    echo "<tr>
+            <td align='right' valign='top'>{$label}</td>
+            <td><div class='checkbox-row'>{$cbr->render()}</div></td>
+          </tr>";
+}
 ?>
 
-<TABLE cellpadding="0" cellspacing="0" border="0">
+<table cellpadding="0" cellspacing="0" border="0">
 
-<form method="post" action="fin_payement_edit_exc.php">
+<form method="post" action="fin_payrule_edit_exc.php">
 <input type="hidden" name="id" value="<?= $id ?>">
 
-<!-- Sport -->
-<TR>
-    <TD align="right" valign="top">Sport</TD>
-    <TD>
-        <div class="checkbox-row">
-<?
+    <?php
+    // --- Sport ---
     $cbr = new CheckboxRow ( '', 'typ', true, 'typ', !$is_new );
-    for ($ii=0; $ii < $g_racetype_cnt; $ii++) {
-        $cbr->addEntry ( $g_racetype[$ii]['nm'], null, $g_racetype[$ii]['enum'], !$is_new && ( isset ( $zaznam['typ']) || $zaznam['typ'] === $g_racetype[$ii]['enum'] ), true );
+    foreach ($g_racetype as $t) {
+        $checked = !$is_new && (!isset($zaznam['typ']) || $zaznam['typ'] === $t['enum']);
+        $cbr->addEntry($t['nm'], null, $t['enum'], $checked, true);
     }
-    echo $cbr->render();
-?>
-        </div>
-    </TD>
-</TR>
+    renderCheckboxRow('Sport', $cbr);
 
-<!-- Typ akce -->
-<TR>
-    <TD align="right" valign="top">Typ akce</TD>
-    <TD>
-        <div class="checkbox-row">
-<?
+    // --- Typ akce ---
     $cbr = new CheckboxRow ( '', 'typ0', true, 'typ0', !$is_new );
 
     foreach ($g_racetype0 as $key => $value) {
-        $cbr->addEntry ( $value, null, $key, !$is_new && ( isset ( $zaznam['typ0'] ) || $zaznam['typ0'] === $key ), true );
+        $checked = !$is_new && (!isset($zaznam['typ0']) || $zaznam['typ0'] === $key);
+        $cbr->addEntry($value, null, $key, $checked, true);
     }
-    echo $cbr->render();
-?>
-        </div>
-    </TD>
-</TR>
+    renderCheckboxRow('Typ akce', $cbr);
 
-<!-- Termín -->
-<TR>
-    <TD align="right" valign="top">Termín</TD>
-    <TD>
-        <div class="checkbox-row">
-<?
+    // --- Termín ---
     $cbr = new CheckboxRow ( '', 'termin', true, 'termin', !$is_new );
 
     for ($t=1; $t<=5; $t++) {
-        $cbr->addEntry ( $t, null, $t, !$is_new && ( !isset ( $zaznam['termin'] ) || $zaznam['termin'] === $t ), true );
+        $checked = !$is_new && (
+            !isset($zaznam['termin']) ||
+            $zaznam['termin'] == $t ||
+            ($zaznam['termin'] < 0 && $zaznam['termin'] > -$t)
+        );
+        $cbr->addEntry($t, null, $t, $checked, true);
     }
-    echo $cbr->render();    
-?>
-        </div>
-    </TD>
-</TR>
+    renderCheckboxRow('Termín', $cbr);
 
-<!-- Žebříček -->
-<TR>
-    <TD align="right" valign="top">Žebříček</TD>
-    <TD>
-        <div class="checkbox-row">
-<?
-    $cbr = new CheckboxRow ( '', 'zebricek', true, 'zebricek', true, !$is_new );
-    for($ii=0; $ii<$g_zebricek_cnt; $ii++) {
-        $cbr->addEntry ( $g_zebricek[$ii]['nm'], null, $g_zebricek[$ii]['id'], !$is_new && ( !isset ($zaznam['zebricek']) || $zaznam['zebricek'] && $g_zebricek[$ii]['id'] != 0 ), true );
+    // --- Žebříček ---
+    $cbr = new CheckboxRow ( '', 'zebricek', true, 'zebricek', !$is_new );
+    foreach ($g_zebricek as $zb) {
+        $checked = !$is_new && (!isset($zaznam['zebricek']) || ($zaznam['zebricek'] && $zb['id'] != 0));
+        $cbr->addEntry($zb['nm'], null, $zb['id'], $checked, true);
     }
-    echo $cbr->render();    
-?>
-        </div>
-    </TD>
-</TR>
+    renderCheckboxRow('Žebříček', $cbr);
 
-<!-- Financial Type -->
-<TR>
-    <TD align="right" valign="top">Finanční typ</TD>
-    <TD>
-        <div class="checkbox-row">
-<?
-    $cbr = new CheckboxRow ( '', 'finType', true, 'financial_type' );
+    // --- Finanční typ ---
+    $cbr = new CheckboxRow ( '', 'finType', true, 'finance_type' );
     while ($ft = mysqli_fetch_array($finTypes)) {
-        $cbr->addEntry ( $ft['nazev'], $ft['popis'], $ft['id'], !$is_new && ( $zaznam['finance_type'] === $ft['id'] ), true );
+        $checked = !$is_new && ( !isset($zaznam['finance_type']) || $zaznam['finance_type'] === $ft['id']);
+        $cbr->addEntry($ft['nazev'], $ft['popis'], $ft['id'], $checked, true);
     }
-    echo $cbr->render();    
+    renderCheckboxRow('Finanční typ', $cbr);
 ?>
-        </div>
-    </TD>
-</TR>
 
-<!-- Payment Type -->
-<TR>
-    <TD align="right">Typ platby</TD>
-    <TD>
-<?
+    <!-- Typ platby -->
+    <tr>
+        <td align="right">Typ platby</td>
+        <td>
+            <?php
     $paymentTypes = ['C' => 'Z celé', 'R' => 'Z rozdílu', 'P' => 'Pevná'];
     foreach ($paymentTypes as $key => $label) {
-        echo('<input type="radio" name="payment_type" value="'.$key.'" id="pt_'.$key.'" onclick="toggleAmount(\''.$key.'\')"');
-        if (($zaznam['druh_platby'] ?? '') == $key) echo(' checked');
-        echo('><label for="pt_'.$key.'">'.$label.'</label>&nbsp;');
+                $checked = (
+                    ($zaznam['druh_platby'] ?? '') === $key
+                    || ($is_new && $key === 'C')
+                ) ? 'checked' : '';
+                echo <<<HTML
+                    <input type="radio" name="payment_type" value="$key" id="pt_$key"
+                           onclick="toggleAmount('$key')" $checked>
+                    <label for="pt_$key">$label</label>&nbsp;
+HTML;
     }
-?>
-    </TD>
-</TR>
+	    ?>
+        </td>
+    </tr>
 
-<TR id="amountRow">
-    <TD align="right">Platba</TD>
-    <TD>
+    <!-- Platba -->
+    <tr id="amountRow">
+        <td align="right">Platba</td>
+        <td>
         &nbsp;<input type="text" name="amount" 
-            value="<?php echo $zaznam['druh_platby'] === 'P' ? $zaznam['platba'] : $zaznam['pomer_platby'] * 100; ?>">
-        <span id="amount_unit"><?php echo $zaznam['druh_platby'] === 'P' ? 'Kč' : '%'; ?></span>
-    </TD>
-</TR>
+                value="<?= isset ( $zaznam['druh_platby'] ) ? $zaznam['platba'] : '' ?>">
+            <span id="amount_unit"><?= isset ( $zaznam['druh_platby'] ) &&  $zaznam['druh_platby'] === 'P' ? 'Kč' : '%' ?></span>
+        </td>
+    </tr>
 
-<TR><TD colspan="2" align="center">
-    <input type="submit" value="Uložit">
-</TD></TR>
+    <tr><td colspan="2" align="center"><input type="submit" value="Uložit"></td></tr>
 </form>
-
-<script>
-document.addEventListener("DOMContentLoaded", () => { initCheckboxGroups(); });
-
-function toggleAmount( type ) {
-    document.getElementById('amount_unit').innerHTML = (type === 'P') ? 'Kč' : '%';
-}
-
-</script>
-
 <BR><hr><BR>
 <? echo('<A HREF="index.php?id='._FINANCE_GROUP_ID_.'&subid=4">Zpět</A><BR>'); ?>
 <BR><hr><BR>
@@ -173,5 +142,13 @@ function toggleAmount( type ) {
 <!-- Footer End -->
 </TD></TR>
 </TABLE>
+
+<script>
+document.addEventListener("DOMContentLoaded", () => { initCheckboxGroups(); });
+
+function toggleAmount( type ) {
+    document.getElementById('amount_unit').innerHTML = (type === 'P') ? 'Kč' : '%';
+}
+</script>
 
 <? HTML_Footer(); ?>

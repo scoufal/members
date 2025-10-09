@@ -83,7 +83,7 @@ else
 			if ( array_key_exists ('', $records) ) {
 				// generic type configuration in column
 				$id = $records['']['id'];
-				$data_tbl->set_header_col($col++,'<A HREF="./fin_payrule_edit.php?id='.$id.'" title="Editovat platby">&#9997;</A>&nbsp;/&nbsp;<A HREF="./fin_payement_del_exc.php?id='.$id.'" onclick="return confirm_delete()" class="Erase" title="Smazat platby">&#10799;</A>',ALIGN_CENTER);
+				$data_tbl->set_header_col($col++,'<A HREF="./fin_payrule_edit.php?id='.$id.'" title="Editovat platby">&#9997;</A>&nbsp;/&nbsp;<A HREF="./fin_payrule_del_exc.php?id='.$id.'" onclick="return confirm_delete()" class="Erase" title="Smazat platby">&#10799;</A>',ALIGN_CENTER);
 			} else {
 				$data_tbl->set_header_col($col++, '',ALIGN_CENTER);
 			}
@@ -117,7 +117,7 @@ else
 						case 'P' : $val = $typedconfig['platba'] . ' Kč'; break; // direct 
 						case 'R' : $val = "&Delta; ";                     // of difference
 						default :
-							$val .= $typedconfig['pomer_platby'] * 100 . '%'; // % of diference or whole
+							$val .= $typedconfig['platba'] . '%'; // % of diference or whole
 					}				
 					if ( array_key_exists ( $zaznam['id'], $config) ) {
 						// multiple types, in place edit

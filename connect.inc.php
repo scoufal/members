@@ -93,16 +93,11 @@ function db_prepare($sql)
  * @param array $params Values to bind
  * @return mysqli_result|bool
  */
-function db_execute($sql, $types = '', array $params = [])
+function db_execute( bool $isSelect, $stmt, $types = '', array $params = [], bool $doClose = true )
 {
 	global $db_conn;
 
 	try {
-		$stmt = $db_conn->prepare($sql);
-		if (!$stmt) {
-			throw new Exception("Prepare failed: " . $db_conn->error);
-		}
-
 		if ($types && $params) {
 			$stmt->bind_param($types, ...$params);
 		}
@@ -110,13 +105,13 @@ function db_execute($sql, $types = '', array $params = [])
 		$stmt->execute();
 
 		// Return result or success
-		if (stripos($sql, 'SELECT') === 0) {
+		if ( $isSelect) {
 			$result = $stmt->get_result();
-			$stmt->close();
+			if ( $doClose ) $stmt->close();
 			return $result;
 		} else {
 			$affected = $stmt->affected_rows;
-			$stmt->close();
+			if ( $doClose ) $stmt->close();
 			return $affected;
 		}
 	} catch (Throwable $ex) {
@@ -129,18 +124,18 @@ function db_execute($sql, $types = '', array $params = [])
  * Simple helper for insert/update/delete (non-select).
  * Usage: db_exec("UPDATE table SET x=? WHERE id=?", "si", [$x, $id]);
  */
-function db_exec($sql, $types, array $params)
+function db_exec($stmt, $types, array $params)
 {
-	return db_execute($sql, $types, $params);
+	return db_execute(false, $stmt, $types, $params);
 }
 
 /**
  * Simple helper for select queries.
  * Usage: $rows = db_select("SELECT * FROM table WHERE name=?", "s", [$name]);
  */
-function db_select($sql, $types = '', array $params = [])
+function db_select($stmt, $types = '', array $params = [])
 {
-	$res = db_execute($sql, $types, $params);
+	$res = db_execute(true, $stmt, $types, $params);
 	if ($res === false) return [];
 	return $res->fetch_all(MYSQLI_ASSOC);
 }

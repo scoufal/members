@@ -5,10 +5,10 @@ require_once "cfg/race_enums.php";
 
 // payement keys - renderer, db
 $g_payrule_keys = [
-    ['typ', 'Sport'],
-    ['typ0', 'Typ akce'],
-    ['termin', 'Termín'],
-    ['zebricek', 'Žebříček'],
+    ['typ', 'Sport', 's'],
+    ['typ0', 'Typ akce', 's'],
+    ['termin', 'Termín', 'i'],
+    ['zebricek', 'Žebříček', 'i'],
 ];
 
 
@@ -159,7 +159,7 @@ class CheckboxRow {
 
             $html .= '<input type="checkbox" data-role="one" data-key="' . htmlspecialchars($this->key) . '" value="' . $entry['id'] . '"';
 			if ( isset ($this->namePrefix) ) {
-				$html .= ' name="' . htmlspecialchars($this->namePrefix) . '[]"';
+				if ( !$this->disabled ) $html .= ' name="' . htmlspecialchars($this->namePrefix) . '[]"'; // name on active only
 				$html .= ' id="' . htmlspecialchars($this->namePrefix) . '_' . $id++ . '"';
 			}
             if (!empty($entry['title'])) {
@@ -173,6 +173,11 @@ class CheckboxRow {
 			if ( $this->disabled )
 				$html .= ' disabled';
             $html .= '>';
+			if ( $entry['checked'] && $this->disabled && isset ($this->namePrefix) ) {
+				// additional input field for disabled checkbox
+				$html .=  '<input type="hidden" name="'. htmlspecialchars($this->namePrefix) . '[]" value="' . $entry['id'] . '">';
+			}
+
 			if ( isset ($this->namePrefix) ) {
 	            $html .= '<label for="' . htmlspecialchars($this->namePrefix) . '_' . ($id - 1) . '">';
 			}
@@ -185,14 +190,19 @@ class CheckboxRow {
         // top-level "all" checkbox
 		if ($this->hasAll) {
 	        $html_pre .= '<input type="checkbox" data-role="all" data-key="' . htmlspecialchars($this->key) . '"';
-			if ( isset ($this->namePrefix) ) {
-				$html_pre .= ' name="' . htmlspecialchars($this->namePrefix) . '_all"';
+			if ( !$this->disabled  && isset ($this->namePrefix) ) {
+				$html_pre .= ' name="' . htmlspecialchars($this->namePrefix) . '_all" value="1"';
 			};			
 			if ( $all_checked )
 				 $html_pre .= ' checked';
 			if ( $this->disabled )
 				$html_pre .= ' disabled';
-			$html_pre .= '>&nbsp;=&gt;&nbsp;&nbsp;';
+			$html_pre .= '>';
+			if ( $all_checked && $this->disabled && isset ($this->namePrefix) ) {
+				// additional input field for disabled checkbox
+				$html_pre .=  '<input type="hidden" name="'. htmlspecialchars($this->namePrefix) . '_all" value="1">';
+			}
+			$html_pre .= '&nbsp;=&gt;&nbsp;&nbsp;';
 		}
 
 

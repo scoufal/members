@@ -5,153 +5,159 @@ define("__HIDE_TEST__", "_KeAr_PHP_WEB_");
 require_once ('connect.inc.php');
 require_once ('sess.inc.php');
 require_once ('common.inc.php');
-require_once ("./cfg/_globals.php");
+require_once ('common_fin.inc.php');
+require_once('./cfg/_globals.php');
 
-if (IsLoggedFinance()) {
-	db_Connect();
+if (!IsLoggedFinance()) {
+	header('location: '.$g_baseadr.'error.php?code=21');
+	exit;
+}
 
-	// basic sanity checks
-	if (empty($payment_type)) {
+db_Connect();
+
+// --- Sanitize / validate input ---
+$payment_type = isset($_POST['payment_type']) ? trim($_POST['payment_type']) : '';
+if ($payment_type === '') {
 		header('location: '.$g_baseadr.'error.php?code=62'); // missing required field
 		exit;
 	}
 
-	// sanitize/normalize input
-	$payment_type = correct_sql_string($payment_type);
+$amount = isset($_POST['amount']) ? intval($_POST['amount']) : 0;
    
-    $sqlkeys = [];
+$local_payrule_keys = $g_payrule_keys; // make a shallow copy
+$local_payrule_keys[] = ['finance_type', 'Finanční typ', 'i'];
 
-    foreach ( $g_payrule_keys as [$key,$label] ) {
-        if ( array_key_exists($key.'_all') ) $sqlkeys[$key] = null;
-        else if ( $key === 'financial_type' ) {
-            $value = $_POST[$key] ?? []; $value = array_map('intval',$value);
-            $sqlkeys[$key] = array_map('intval',$_POST[$key] ?? []);
+// --- Build normalized key array ---
+$sqlkeys = [];
+
+foreach ($local_payrule_keys as [$key, $label, $type]) {
+	$post_all = $_POST[$key . '_all'] ?? null;
+	$post_arr = $_POST[$key] ?? [];
+
+	if ($post_all) {
+		$sqlkeys[$key] = null;
+	} elseif ($key === 'termin' && is_array($post_arr) && count($post_arr) > 0 ) {
+		$nums = array_map('intval', $post_arr);
+		sort($nums);
+		$first = reset($nums);
+		// if full continuous range n..5 is selected -> -n
+		if ($nums === range($first, 5)) {
+			$sqlkeys[$key] = -$first;
+		} else {
+			$sqlkeys[$key] = $nums;
         }
-        else {
-            $sqlkeys[$key] = $_POST[$key] ?? [];
+	} else {
+		$sqlkeys[$key] = is_array($post_arr) && count($post_arr) > 0 ? $post_arr : null;
         }
     }
 
-    // value/ratio fields
-	$amount_currency = isset($amount_currency) ? intval($amount_currency) : 0;
-	$amount_percent = isset($amount_percent) ? intlval($amount_percent) : 0;
-
-    $types = ""; // list of bind types
-    $values = [];  // list of bind values
-    $update_query = "
-        UPDATE " . TBL_PAYRULES . "
-        SET ";
-
-    $update_query .= 'druh_platby = :druh_platby';
-    $types .= 's';
-    $values[] = $payment_type;
-
-    // choose which field to save depending on payment type
-    if ($payment_type === 'P') {
-        $update_query .= 'platba = :platba';
-        $types .= 'i';
-        $values[] = $amount_currency;
-    } else {
-        $update_query .= 'pomer_platby  = :pomer_platby ';
-        $types .= 'd';
-        $values[] = $amount_percent / 100.0;
-    }    
-    
-    $update_query .= 'WHERE id = :id';
-    $types .= 'i';
-
-	if (isset($id) && is_numeric($id)) {
-        // update payement info
-		$values[] = (int)$id;
-
-        $stmt = $db_connect->prepare($update_query);
-
-        $db_exec ( $stmt, $types, $values );
-	}
-	else
-	{
-        $value_marker = [];
-        $values = []; // value array, containt some bind values. Will be modified on multivalue updates 
-        $keyIndexes = []; // mapping key => value position
-
-        $check_query = "SELECT id FROM " .TBL_PAYRULES. " WHERE ";
-        $check_values = [];
-
-        $insert_query = "INSERT INTO " .TBL_PAYRULES. "(";
-            
-        foreach ( $sqlkeys as [$key,$value] ) {
-            $insert_query .= $key . ', ';
-            $test_query .= $key . '= :' . $key; 
-            $types .= ( $key === 'financial_type' ? 'i' : 's' );
-            $values[] = null;
-            $check_values[] = null;
-            $keyIndexes[$key] = count($values);
-            $value_marker[] = '?';
-        }
-
-        $insert_query .= 'druh_platby, ';
-        $values[] = $payment_type;
-        $value_marker[] = '?';
-
-        // choose which field to save depending on payment type
-        if ($payment_type === 'P') {
-            $insert_query .= 'platba ';
-            $values[] = $amount_currency;
-            $value_marker[] = '?';
-        } else {
-            $insert_query .= 'pomer_platby ';
-            $values[] = $amount_percent / 100.0;
-            $value_marker[] = '?';
-        }    
-
-        $insert_query .= ") VALUES (" . implode ( ',', $value_marker ) . ");";
-
-        $stmt = $db_connect->prepare($insert_query);
-
-        // build the combinations for checked values
-        $combinations = [[]]; // start with one empty combination
-
-        foreach ($g_payrule_keys as [$key, $label]) {
-            $allKey = $key . '_all';
-            $arrayKey = $key; // checkbox array
-
-            if (!empty($_POST[$allKey])) {
-                // "all" selected → single NULL value
-                $values = [null];
-            } elseif (!empty($_POST[$arrayKey]) && is_array($_POST[$arrayKey])) {
-                $values = $_POST[$arrayKey];
-            } else {
-                // nothing selected
-                $values = [null];
-            }
-
-            // build Cartesian product
-            $newCombinations = [];
-            foreach ($combinations as $combo) {
-                foreach ($values as $v) {
-                    $newCombinations[] = array_merge($combo, [$v]);
-                }
-            }
-            $combinations = $newCombinations;
-        }
-
-
-
-
-        $db_exec ( $stmt, $types, $values );
-    }
-
-	$result = query_db($insert_query)
-		or die("Chyba při provádění dotazu do databáze.");
-
-	if ($result == FALSE)
-		die("Nepodařilo se uložit záznam o platbě.");
-
-	header('location: '.$g_baseadr.'index.php?id='._FINANCE_GROUP_ID_.'&subid=5');
-}
-else
+// --- Check existing record (same key combination) ---
+function find_existing_id(array $keys)
 {
-	header('location: '.$g_baseadr.'error.php?code=21');
-	exit;
+	$conditions = [];
+	$values = [];
+	$types = '';
+	foreach ($keys as $k => $v) {
+		if (is_null($v)) {
+			$conditions[] = "$k IS NULL";
+        } else {
+			$conditions[] = "$k = ?";
+			$types .= is_int($v) ? 'i' : 's';
+			$values[] = $v;
+		}
+	}
+	$sql = "SELECT id FROM " . TBL_PAYRULES . " WHERE " . implode(' AND ', $conditions) . " LIMIT 1";
+	$stmt = db_prepare($sql);
+	$res = db_select($stmt,$types,$values);
+	return $res && count ($res) > 0 ? $res[0]['id'] : null;
+}    
+
+// --- Determine existing / new record ---
+$existing_id = null;
+
+// Build combinations of all key values
+$combinations = [[]];
+foreach ($local_payrule_keys as [$key, $label, $type]) {
+
+	$vals = $sqlkeys[$key];
+
+	if ($vals === null) {
+		$vals = [null];
+	} elseif (is_array($vals)) {
+		$vals = $vals;
+	} else {
+		$vals = [$vals];
+	}
+
+	// build Cartesian product
+	$newCombinations = [];
+	foreach ($combinations as $combo) {
+		foreach ($vals as $v) {
+			$newCombinations[] = array_merge($combo, [$key => $v]);
+		}
+	}
+	$combinations = $newCombinations;
 }
+
+var_dump ( $combinations );
+// --- For each combination: update or insert ---
+foreach ($combinations as $combo) {
+
+	var_dump ( $combo );
+
+	$existing_id = find_existing_id($combo);
+
+	if ($existing_id) {
+		// --- Update existing ---
+		$sql = "UPDATE " . TBL_PAYRULES . " 
+		        SET druh_platby = ?, platba = ? 
+		        WHERE id = ?";
+		$stmt = db_prepare($sql);
+
+		echo '<br>' . $sql . ' id=' . $existing_id . ' ' . $payment_type . ' ' . $amount;
+		$result = db_exec($stmt, 'sii', [$payment_type, $amount, $existing_id]);
+
+		if ($result === FALSE)
+			die("Nepodařilo se uložit záznam o definici platby.");
+	} else {
+		// --- Insert new ---
+		$fields = [];
+		$placeholders = [];
+		$values = [];
+		$types = '';
+
+		foreach ($local_payrule_keys as [$key, $label, $type]) {
+			$fields[] = $key;
+			$placeholders[] = '?';
+			$v = $combo[$key] ?? null;
+			$values[] = $v;
+			$types .= $type;
+		}
+
+		// add fixed fields
+		$fields[] = 'druh_platby';
+		$fields[] = 'platba';
+		$placeholders[] = '?';
+		$placeholders[] = '?';
+		$values[] = $payment_type;
+		$values[] = $amount;
+		$types .= 'si';
+
+		$sql = "INSERT INTO " . TBL_PAYRULES . " (" . implode(',', $fields) . ")
+			VALUES (" . implode(',', $placeholders) . ")";
+
+		$stmt = db_prepare($sql);
+
+		echo '<br>' . $sql; var_dump ( $values );
+		$result = db_exec($stmt, $types, $values);
+
+		var_dump($result);
+
+		if ($result == FALSE)
+			die("Nepodařilo se vytvořit záznam o definici platby.");
+	}
+}
+
+//header('location: '.$g_baseadr.'index.php?id='._FINANCE_GROUP_ID_.'&subid=4');
+exit;
 ?>
