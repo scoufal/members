@@ -147,6 +147,12 @@ $checkBoxRows['as'] = $cbu = new CheckboxRow ( 'Účastník', 'as', false );
 $cbu->addEntry('Přihlášen', 'Závodník byl přihlášen do závodu', null, true, true);
 $cbu->addEntry('Neřihlášen s platbami', 'Závodník byl přidán do závodu', null, true, true);
 $cbu->addEntry('Ostatní', 'Závodník nebyl přihlášen do závodu', null, false, true);
+$checkBoxRows['transport'] = $cbt = new CheckboxRow ( 'Doprava', 'transport', false );
+$cbt->addEntry('Ano', 'Závodník využil dopravu', 1, true, true);
+$cbt->addEntry('Ne', 'Závodník nevyužil dopravu', 0, true, true);
+$checkBoxRows['accommodation'] = $cba = new CheckboxRow ( 'Ubytování', 'accommodation', false );
+$cba->addEntry('Ano', 'Závodník využil ubytování', 1, true, true);
+$cba->addEntry('Ne', 'Závodník nevyužil ubytování', 0, true, true);
 $checkBoxRows['participated'] = $cbp = new CheckboxRow ( 'Přidán v účasti', 'participated', false );
 $cbp->addEntry('Ano', 'Závodník byl přidán', 1, true, true);
 $cbp->addEntry('Ne', 'Závodník nebyl přidán', 0, true, true);
@@ -162,6 +168,10 @@ $cbabf->addEntry('Ne', 'Závodník nebyl přidán', 0, true, true);
 <div class="checkbox-row" data-key="fintype"></div>
 <div class="checkbox-row">
 <div class="checkbox-row" data-key="as"></div>
+<span style="width: 2em;">&nbsp;</span>
+<div class="checkbox-row" data-key="transport"></div>
+<span style="width: 2em;">&nbsp;</span>
+<div class="checkbox-row" data-key="accommodation"></div>
 <span style="width: 2em;">&nbsp;</span>
 <div class="checkbox-row" data-key="participated"></div>
 <span style="width: 2em;">&nbsp;</span>
@@ -350,6 +360,8 @@ while ($zaznam=mysqli_fetch_assoc($vysledek_all))
 	    'data-participated' => $zaznam['participated']??0,
 		'data-addByFin' => $zaznam['add_by_fin']??0,
 		'data-fintype' => $zaznam['finance_type']??0,
+		'data-transport' => $zaznam['transport']??0,
+		'data-accommodation' => $zaznam['ubytovani']??0,
 		'data-as' => '0' ]; // participant
 	echo $data_tbl->get_new_row_arr($row, $attrs)."\n";
 	$i++;
@@ -368,7 +380,10 @@ do  {
 	}
 
 	$attrs = ['data-fintype' => $zaznam['finance_type']??0,
-		'data-as' => '1']; // other payer
+		'data-as' => '1',
+		'data-transport' => 0,
+		'data-accommodation' => 0 ]
+		; // other payer
 
 	if ( !empty ( $ext_id ) && $connector!== null ) {
 		$kat = getOrisClass($zaznam['reg']);
@@ -447,7 +462,10 @@ do {
 	}
 
 	$attrs = [ 'data-fintype' => $zaznam['finance_type'] ?? 0,
-		'data-as' => '2' ]; // other non-payer
+		'data-as' => '2',
+		'data-transport' => 0,
+		'data-accommodation' => 0
+		]; // other non-payer
 
 	$id = $zaznam['id'];
 	
