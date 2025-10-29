@@ -45,12 +45,14 @@ div.form-field {
 	vertical-align: middle;
 }
 .unpinned {
+	font-size: 0.9rem;
 	opacity: 0.3;   /* faded */
 }
 .pinned {
+	font-size: 0.9rem;
 	opacity: 1;
 }
 .selected {
-	font-size: 1.5rem;
+	font-size: 1.2em;
 	color: green;
 }

@@ -241,12 +241,12 @@ function renderFormField(string $column, string $label, string $type = 'text', s
 	&nbsp;<br/><button 
 	onclick="updateRowsByState((row, marker, state) => {
 		if (state === 'selected') setSelectedState ( marker, 'pinned'); })" 
-	title="Připnutí vybraných řádků">Připnout vybrané</button>
+	title="Připnutí vybraných řádků" style="white-space: nowrap"><span class="state selected">✔</span>=&gt;<span class="state pinned">📌</span></button>
   </div>
 <div class="form-field">
    &nbsp;<br/><button 	onclick="updateRowsByState((row, marker, state) => {
 		if (state !== 'unpinned') setSelectedState ( marker, 'unpinned'); })"
-	 title="Odepnout všechny řádky">Odepnout všechny</button><br/>
+	 title="Odepnout všechny řádky" style="white-space: nowrap">*=&gt;<span class="state unpinned">📌</span></button><br/>
 </div>
 </div>
 </div>
