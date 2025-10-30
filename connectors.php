@@ -21,12 +21,15 @@ class RaceInfo {
 	public $prihlasky3;
 	public $prihlasky4;
 	public $prihlasky5;
+	public $koeficient1;
+	public $koeficient2;
 	public $etap;
 	public $poznamka;
 	public $vicedenni;
 	public $oddil;
 	public $modify_flag;
 	public $kategorie;
+	public $startovne;
 
 	// Constructor to initialize the object with key-value pairs
 	public function __construct($data) {
@@ -45,12 +48,15 @@ class RaceInfo {
 		$this->prihlasky3 = $data['prihlasky3'] ?? null;
 		$this->prihlasky4 = $data['prihlasky4'] ?? null;
 		$this->prihlasky5 = $data['prihlasky5'] ?? null;
+		$this->koeficient1 = $data['koeficient1'] ?? null;
+		$this->koeficient2 = $data['koeficient2'] ?? null;
 		$this->etap = $data['etap'] ?? null;
 		$this->poznamka = $data['poznamka'] ?? null;
 		$this->vicedenni = $data['vicedenni'] ?? null;
 		$this->oddil = $data['oddil'] ?? null;
 		$this->modify_flag = $data['modify_flag'] ?? null;
 		$this->kategorie = $data['kategorie'] ?? null;
+		$this->startovne = $data['startovne'] ?? null;
 	}
 }
 
@@ -144,7 +150,6 @@ class OrisCZConnector implements ConnectorInterface {
 		$this->apiUrl = $this->sourceUrl . 'API/';
 	}
 
-
 	// Method to get the system name
 	public function getSystemName(): string {
 		return "Oris";
@@ -191,19 +196,20 @@ class OrisCZConnector implements ConnectorInterface {
 		return implode('+', $oddily);
 	}
 
-	// Method to get race date based on race ID
-	public function getRaceDate($raceId) {
-		$url = $this->apiUrl . '?format=json&method=getEvent&id=' . $raceId;
-		$response = $this->makeRequest($url);
-
-		if ($response && $response['Status'] == "OK") {
-			$raceData = $response['Data'];
-
-			return String2DateDMY(formatDate($raceData['Date']));
-		} else {
-			return ''; // Return empty string if race not found or error
+	// Method to get race date based on race ID or provided response
+	public function getRaceDate($raceId, $response = null) {
+		// If no response provided, fetch it from API
+		if ($response === null) {
+			$url = $this->apiUrl . '?format=json&method=getEvent&id=' . $raceId;
+			$response = $this->makeRequest($url);
 		}
 
+		if ($response && isset($response['Status']) && $response['Status'] === "OK") {
+			$raceData = $response['Data'];
+			return String2DateDMY(formatDate($raceData['Date']));
+		}
+
+		return ''; // Return empty string if race not found or error
 	}
 
 	// Method to get detailed race information based on race ID
@@ -215,21 +221,23 @@ class OrisCZConnector implements ConnectorInterface {
 		if ($response && $response['Status'] == "OK") {
 			$raceData = $response['Data'];
 			
-			$classNames = [];
+			$classFees = [];
 			if (isset($raceData['Classes'])) {
 				foreach ($raceData['Classes'] as $class) {
 					if (isset($class['Name'])) {
-						$classNames[] = $class['Name'];
+						$name = $class['Name'];
+						$fee  = $class['Fee'] ?? null; // default to null if missing
+						$classFees[$name] = $fee;
 					}
 				}
 			}
-			
-			sort($classNames);
+
+			ksort ( $classFees );
 
 			$oddily = $this->getClubs($raceData);
 			
 			// Get last Stage date if multistage event
-			$date2 = ($raceData['Stages'] > 1) ? $this->getRaceDate($raceData['Stage'.$raceData['Stages']]) : 0;
+			$date2 = ($raceData['Stages'] > 1) ? $this->getRaceDate($raceData['Stage'.$raceData['Stages']], $response) : 0;
 			// Use associative array to pass data to constructor
 			return new RaceInfo([
 				'ext_id' => $raceData['ID'],
@@ -250,12 +258,15 @@ class OrisCZConnector implements ConnectorInterface {
 //				'prihlasky3' => '',
 //				'prihlasky4' => '',
 //				'prihlasky5' => '',
+				'koeficient1' => strtotime($raceData['EntryKoef2']),
+				'koeficient2' => strtotime($raceData['EntryKoef3']),
 				'etap' => $raceData['Stages'],
 //				'poznamka' => $poznamka,
 				'vicedenni' => ($raceData['Stages']>1?1:0),
 				'oddil' => $oddily,
 				'modify_flag' => 0,
-				'kategorie' => implode(';', $classNames )
+				'kategorie' => implode(';', array_keys ( $classFees ) ),
+				'startovne' => $classFees
 				]);
 		} else {
 			return null; // Return null if race not found or error

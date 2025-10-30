@@ -6,7 +6,7 @@
 $query_all = "SELECT 
     u.id AS u_id, u.sort_name, u.reg, u.finance_type,
 	f.id, f.amount, f.note,
-	zu.id AS zu_id, zu.kat, zu.transport, zu.ubytovani, zu.participated, zu.add_by_fin
+	zu.id AS zu_id, zu.kat, zu.termin, zu.transport, zu.ubytovani, zu.participated, zu.add_by_fin
 FROM ".TBL_USER." u
 LEFT JOIN ".TBL_ZAVXUS." zu
        ON u.id = zu.id_user 
@@ -49,7 +49,10 @@ $connector = ConnectorFactory::create();
 if ( !empty ( $ext_id ) && $connector!== null ) {
 
     // Get race info by race ID
-    $racePayement = $connector->getRacePayement($ext_id);
+	$raceInfo = $connector->getRaceInfo($ext_id);
+
+    // Get race payement by race ID
+	$racePayement = $connector->getRacePayement($ext_id);
     if ( $racePayement == null ) {
 		$racePayement = new RacePayement(0);
 		echo " \u{26A0} neplatné ID závodu";
@@ -114,22 +117,47 @@ if ( !empty ( $ext_id ) && $connector!== null ) {
 		}
 	}
 } else {
-	$racePayement = new RacePayement(0);
+	$raceInfo = new RaceInfo(0);
+	$racePayement = new RacePayement(0);	
 }
 
-function getOrisFee($reg) : string {
-	global $g_shortcut;
-	global $racePayement;
-	if ( isset ($racePayement->participants[$g_shortcut.RegNumToStr($reg)]) ) {
-		$participant = $racePayement->participants[$g_shortcut.RegNumToStr($reg)];
-		$fee = $participant->fee;
-		if ( $participant->feeTier > 1 ) {
-			$fee = '<span class="TextAlert">'.$fee . '/' . $participant->feeTier .'</span>'; 
-		}
-		return $fee;
+function getOrisFee($reg): array {
+    global $g_shortcut, $racePayement;
+
+    $key = $g_shortcut . RegNumToStr($reg);
+
+    if (isset($racePayement->participants[$key])) {
+        $participant = $racePayement->participants[$key];
+        return [
+            'fee'  => $participant->fee,
+            'tier' => $participant->feeTier
+        ];
 	}
-	return '';
+
+    return ['fee' => '', 'tier' => 0];
 }
+
+function renderOrisFee(array $feeData): string {
+    global $connector;
+
+	if ( empty($feeData['fee'])) {
+        return '';
+	}
+
+	$tierSuffix = '';
+	$title = '';
+    if ( !empty($feeData['membersonly']) ) {
+		$tierSuffix = 'P';
+		$title = ' title="Jen v members, ne v přihláškách v ' . $connector->getSystemName().'"';
+    }
+
+    if ($feeData['tier'] > 1 || !empty($tierSuffix) ) {
+        return '<span class="TextAlert"' . $title . '>' . $feeData['fee'] . '/' . $feeData['tier'] . $tierSuffix . '</span>';
+    }
+
+    return $feeData['fee'];
+}
+
 
 function getOrisClass($reg) : string {
 	global $g_shortcut;
@@ -337,8 +365,27 @@ while ($zaznam=mysqli_fetch_assoc($vysledek_all))
 	$row_text .= '<input type="hidden" id="userid'.$i.'" name="userid'.$i.'" value="'.$zaznam["u_id"].'"/><input type="hidden" id="paymentid'.$i.'" name="paymentid'.$i.'" value="'.$zaznam["id"].'"/>'; 
 	$row[] = $row_text;
 
+	$regFees = null;
 	if ( !empty ( $ext_id ) && $connector!== null ) {
-		$row[] = getOrisFee($zaznam['reg']);
+		// startovne z Orisu
+		$regFees = getOrisFee($zaznam['reg']);
+		if ( isset ( $regFees ) && $regFees['fee'] ) {
+			// nalezeno v oris prihlasenych
+			$row[] = renderOrisFee($regFees);
+		} else if ($raceInfo->startovne[$zaznam['kat']] ) {
+			// z definice zavodu				
+			$regFees['membersonly'] = true;
+			$regFees['fee'] = $raceInfo->startovne[$zaznam['kat']];
+			$regFees['tier'] = $zaznam['termin'];
+			if ( $zaznam['termin'] === 2 && $raceInfo->koeficient1 > 0 ) {
+				$regFees['fee'] += $regFees['fee'] * $raceInfo->koeficient1 / 100;
+			} else if ( $zaznam['termin'] === 3 && $raceInfo->koeficient2 > 0 ) {
+				$regFees['fee'] += $regFees['fee'] * $raceInfo->koeficient2 / 100;
+			}
+			$row[] = renderOrisFee($regFees);
+		} else {
+			$row[] = '';
+		}
 	}
 
 	// startovne
@@ -363,6 +410,16 @@ while ($zaznam=mysqli_fetch_assoc($vysledek_all))
 		'data-transport' => $zaznam['transport']??0,
 		'data-accommodation' => $zaznam['ubytovani']??0,
 		'data-as' => '0' ]; // participant
+
+	// financial wizard attributes
+	if ( isset ( $regFees ) && $regFees['fee'] ) {
+		$attrs['data-start-fee'] = $regFees['fee'];
+		$attrs['data-start-tier'] = $regFees['tier'];
+		if ( !empty($regFees['membersonly']) ) {
+			$attrs['data-start-members'] = 1;
+		}
+	}
+
 	echo $data_tbl->get_new_row_arr($row, $attrs)."\n";
 	$i++;
 }
@@ -420,12 +477,21 @@ do  {
 	$row_text .= '<input type="hidden" id="userid'.$i.'" name="userid'.$i.'" value="'.$zaznam["u_id"].'"/><input type="hidden" id="paymentid'.$i.'" name="paymentid'.$i.'" value="'.$zaznam["id"].'"/>';
 	$row[] = $row_text;
 
+	$regFees = null;
 	if ( !empty ( $ext_id ) && $connector!== null ) {
-		$row[] = getOrisFee($zaznam['reg']);
+		// startovne z Orisu
+		$regFees = getOrisFee($zaznam['reg']);
+		$row[] = renderOrisFee( $regFees );
 	}
 
 	// startovne
 	$row[] = '<span data-col="entryFee" data-init="0"></span>';	
+
+	// financial wizard attributes
+	if ( isset ( $regFees ) && $regFees['fee'] ) {
+		$attrs['data-start-fee'] = $regFees['fee'];
+		$attrs['data-start-tier'] = $regFees['tier'];
+	}
 
 	echo $data_tbl->get_new_row_arr($row, $attrs)."\n";
 
@@ -492,12 +558,21 @@ do {
 	$row_text .= '<input type="hidden" id="userid'.$i.'" name="userid'.$i.'" value="'.$zaznam["u_id"].'"/><input type="hidden" id="paymentid'.$i.'" name="paymentid'.$i.'" value="'.$zaznam["id"].'"/>';
 	$row[] = $row_text;
 
+	$regFees = null;
 	if ( !empty ( $ext_id ) && $connector!== null ) {
-		$row[] = getOrisFee($zaznam['reg']);
+		// startovne z Orisu
+		$regFees = getOrisFee($zaznam['reg']);
+		$row[] = renderOrisFee( $regFees );
 	}
 
 	// startovne
 	$row[] = '<span data-col="entryFee" data-init="0"></span>';	
+
+	// financial wizard attributes
+	if ( isset ( $regFees ) && $regFees['fee'] ) {
+		$attrs['data-start-fee'] = $regFees['fee'];
+		$attrs['data-start-tier'] = $regFees['tier'];
+	}
 
 	echo $data_tbl->get_new_row_arr($row,$attrs)."\n";
 	$i++;
