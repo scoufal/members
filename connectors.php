@@ -11,6 +11,7 @@ class RaceInfo {
 	public $datum2;
 	public $nazev;
 	public $misto;
+	public $oblasti;
 	public $typ;
 	public $zebricek2;
 	public $ranking;
@@ -38,6 +39,7 @@ class RaceInfo {
 		$this->datum2 = $data['datum2'] ?? null;
 		$this->nazev = $data['nazev'] ?? null;
 		$this->misto = $data['misto'] ?? null;
+		$this->oblasti = $data['oblasti'] ?? null;
 		$this->typ = $data['typ'] ?? null;
 		$this->zebricek2 = $data['zebricek2'] ?? null;
 		$this->ranking = $data['ranking'] ?? null;
@@ -235,6 +237,12 @@ class OrisCZConnector implements ConnectorInterface {
 			ksort ( $classFees );
 
 			$oddily = $this->getClubs($raceData);
+			$oblasti = [];
+			if (isset($raceData['Regions'])) {
+				foreach ($raceData['Regions'] as $tag => $region) {
+					$oblasti[] = $region['ID'];
+				}
+			}
 			
 			// Get last Stage date if multistage event
 			$date2 = ($raceData['Stages'] > 1) ? $this->getRaceDate($raceData['Stage'.$raceData['Stages']], $response) : 0;
@@ -247,6 +255,7 @@ class OrisCZConnector implements ConnectorInterface {
 				'misto' => $raceData['Place'],
 //				  'category' => $raceData['Category'],
 				 //typ0 => Typ akce
+				'oblasti' => $oblasti,
 				'typ0' => 'Z',
 				'typ' => $this->mapSport($raceData['Sport']['ID']), 
 				'zebricek2' => $this->mapLevelToZebricek2($raceData['Level']['ID']),

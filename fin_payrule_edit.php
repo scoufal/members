@@ -82,7 +82,7 @@ function renderCheckboxRow(string $label, CheckboxRow $cbr): void
     // --- Žebříček ---
     $cbr = new CheckboxRow ( '', 'zebricek', true, 'zebricek', !$is_new );
     foreach ($g_zebricek as $zb) {
-        $checked = !$is_new && (!isset($zaznam['zebricek']) || ($zaznam['zebricek'] && $zb['id'] != 0));
+        $checked = !$is_new && (!isset($zaznam['zebricek']) || ( ( $zaznam['zebricek'] & $zb['id'] ) != 0));
         $cbr->addEntry($zb['nm'], null, $zb['id'], $checked, true);
     }
     renderCheckboxRow('Žebříček', $cbr);
@@ -126,6 +126,16 @@ HTML;
             <span id="amount_unit"><?= isset ( $zaznam['druh_platby'] ) &&  $zaznam['druh_platby'] === 'P' ? 'Kč' : '%' ?></span>
         </td>
     </tr>
+
+    <?php
+    // --- Účtováno ---
+        $cbr = new CheckboxRow ( '', 'uctovano', true, 'uctovano', false );
+        foreach ($g_uctovano as $uc) {
+            $checked = !$is_new && (!isset($zaznam['uctovano']) || (($zaznam['uctovano'] & $uc['id']) != 0));
+            $cbr->addEntry($uc['nm'], null, $uc['id'], $checked, true);
+        }
+        renderCheckboxRow('Účtováno', $cbr);
+    ?>
 
     <tr><td colspan="2" align="center"><input type="submit" value="Uložit"></td></tr>
 </form>

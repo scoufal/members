@@ -112,7 +112,10 @@ $g_race_accommodation_default = 1;
 $g_external_is_connector = 'OrisCZConnector';
 // Identifikator oddilu v informacnim systemu
 $g_external_is_club_id = '';
-
+// Identifikator C oblasti v informacnim systemu e.g. JM
+$g_external_is_region_C = '';
+// Identifikator B oblasti v informacnim systemu e.g. Č M
+$g_external_is_region_B = '';
 
 $g_custom_entry_list_text = '';
 

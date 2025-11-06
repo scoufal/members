@@ -46,13 +46,18 @@ foreach ($local_payrule_keys as [$key, $label, $type]) {
 		} else {
 			$sqlkeys[$key] = $nums;
         }
+	} elseif ( $key === 'zebricek' && is_array($post_arr) && count($post_arr) > 0 ) {
+		// sum up bitwise flags
+		$sqlkeys[$key] = array_sum($post_arr);
+	} elseif ( $key === 'finance_type' && is_array($post_arr) && count($post_arr) > 0 ) {
+		$sqlkeys[$key] = array_map('intval',$post_arr);
 	} else {
 		$sqlkeys[$key] = is_array($post_arr) && count($post_arr) > 0 ? $post_arr : null;
-        }
     }
+}
 
 // --- Check existing record (same key combination) ---
-function find_existing_id(array $keys)
+function find_existing_ids(array $keys, int $uctovano): array
 {
 	$conditions = [];
 	$values = [];
@@ -66,14 +71,41 @@ function find_existing_id(array $keys)
 			$values[] = $v;
 		}
 	}
-	$sql = "SELECT id FROM " . TBL_PAYRULES . " WHERE " . implode(' AND ', $conditions) . " LIMIT 1";
+	$sql = "SELECT id, uctovano FROM " . TBL_PAYRULES . " WHERE " . implode(' AND ', $conditions);
 	$stmt = db_prepare($sql);
 	$res = db_select($stmt,$types,$values);
-	return $res && count ($res) > 0 ? $res[0]['id'] : null;
-}    
 
-// --- Determine existing / new record ---
-$existing_id = null;
+    $result = [];
+
+	$has_entry = false;
+
+	echo '<br> uctovano'; var_dump ( $uctovano );
+    if ($res && count($res) > 0) {
+        foreach ($res as $row) {
+			echo '<br> row'; var_dump ( $row );
+			$mask = -1; // delete record
+			if ( !$has_entry ) {
+				// there is no record yet
+				if ( $row['uctovano'] == $uctovano ) {
+					// exact one use it
+					$mask = $uctovano;
+					$has_entry = true;
+				} elseif ( ( $row['uctovano'] | $uctovano ) == $uctovano ) {
+					// no additional bits
+					$mask = $uctovano;
+					$has_entry = true;
+				} else {
+					// remaining bits
+            		$mask = ((int)$row['uctovano']) & (~(int)$uctovano);
+				}
+			}
+			echo 'Mask ' . $mask . ' ' . $has_entry;
+            $result[$row['id']] = $mask;
+        }
+    }
+	
+	return $result;
+}    
 
 // Build combinations of all key values
 $combinations = [[]];
@@ -100,26 +132,55 @@ foreach ($local_payrule_keys as [$key, $label, $type]) {
 }
 
 var_dump ( $combinations );
+// --- Determine existing / new record ---
+$uctovano = isset($_POST['uctovano']) ? array_sum($_POST['uctovano']) : 0;
+
 // --- For each combination: update or insert ---
 foreach ($combinations as $combo) {
 
-	var_dump ( $combo );
+	echo '<br>Combo '; var_dump ( $combo );
+	$existing_ids = find_existing_ids($combo, $uctovano);
+	echo '<br>existing_ids '; var_dump ($existing_ids);
 
-	$existing_id = find_existing_id($combo);
+	$has_entry = false;
 
-	if ($existing_id) {
-		// --- Update existing ---
-		$sql = "UPDATE " . TBL_PAYRULES . " 
-		        SET druh_platby = ?, platba = ? 
-		        WHERE id = ?";
-		$stmt = db_prepare($sql);
+	foreach ($existing_ids as $existing_id => $existing_uctovano) {
+		
+		echo '<br> existing'; var_dump ($existing_id); var_dump($existing_uctovano);
+		// manage existing
+		if ($existing_id) {
+			if ( $existing_uctovano == -1 ) {
+				// delete record
+				$sql = "DELETE FROM " . TBL_PAYRULES . " WHERE id = ?";
+				$stmt = db_prepare($sql);
+				echo '<br>' . $sql . ' id=' . $existing_id;
+				$result = db_exec($stmt, 's', [$existing_id]);
+			} elseif ( ((int)$existing_uctovano & ~(int)$uctovano ) != 0 ) {
+				// restrict existing $uctovano list
+				$sql = "UPDATE " . TBL_PAYRULES . " 
+						SET uctovano = ? 
+						WHERE id = ?";
+				$stmt = db_prepare($sql);
+				echo '<br>' . $sql . ' id=' . $existing_id . ' ' . $existing_uctovano;
+				$result = db_exec($stmt, 'si', [$existing_uctovano, $existing_id]);
+			} else {
+				// --- Update existing ---
+				$has_entry = true;
+				$sql = "UPDATE " . TBL_PAYRULES . " 
+						SET druh_platby = ?, platba = ?, uctovano = ? 
+						WHERE id = ?";
+				$stmt = db_prepare($sql);
 
-		echo '<br>' . $sql . ' id=' . $existing_id . ' ' . $payment_type . ' ' . $amount;
-		$result = db_exec($stmt, 'sii', [$payment_type, $amount, $existing_id]);
+				echo '<br>' . $sql . ' id=' . $existing_id . ' ' . $payment_type . ' ' . $amount . ' ' . $existing_uctovano;
+				$result = db_exec($stmt, 'siii', [$payment_type, $amount, $existing_uctovano, $existing_id]);
+			}
 
-		if ($result === FALSE)
-			die("Nepodařilo se uložit záznam o definici platby.");
-	} else {
+			if ($result === FALSE)
+				die("Nepodařilo se uložit záznam o definici platby.");
+		} 
+	}
+	
+	if ( !$has_entry ) {
 		// --- Insert new ---
 		$fields = [];
 		$placeholders = [];
@@ -137,18 +198,21 @@ foreach ($combinations as $combo) {
 		// add fixed fields
 		$fields[] = 'druh_platby';
 		$fields[] = 'platba';
+		$fields[] = 'uctovano';
+		$placeholders[] = '?';
 		$placeholders[] = '?';
 		$placeholders[] = '?';
 		$values[] = $payment_type;
 		$values[] = $amount;
-		$types .= 'si';
+		$values[] = $uctovano;
+		$types .= 'sii';
 
 		$sql = "INSERT INTO " . TBL_PAYRULES . " (" . implode(',', $fields) . ")
 			VALUES (" . implode(',', $placeholders) . ")";
 
 		$stmt = db_prepare($sql);
 
-		echo '<br>' . $sql; var_dump ( $values );
+		echo '<br>' . $sql . ' ' .$types. ' '; var_dump ( $values );
 		$result = db_exec($stmt, $types, $values);
 
 		var_dump($result);

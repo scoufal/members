@@ -19,7 +19,7 @@ $configured = []; // all payements in tree
 
 function payementRow ( $field, $nazev ) {
 
-	global $configured, $g_payrule_keys;
+	global $configured, $g_payrule_keys, $g_zebricek;
 
 	$row = array();
 	$row[] = '';
@@ -30,10 +30,19 @@ function payementRow ( $field, $nazev ) {
 	foreach ( $configured as $key => $config ) {
 
 		$firstconfig = reset($config);
-		$val = $firstconfig[$field]; // any first record in array
+		$val = $firstconfig[0][$field]; // any first record in array
 		switch ( $field ) {
 			case 'typ' : $row[] = GetRaceTypeName ($val); break;
 			case 'termin' : $row[] = ( $val < 0 ) ? ( -$val . '+' ) : $val; break;
+			case 'zebricek' :
+				$flags = [];
+				foreach ( $g_zebricek as $zeb ) {
+					if ( ( $val & $zeb['id'] ) != 0 ) {
+						$flags[] = $zeb['nm'];
+					}
+				}
+				$row[] = implode ( '<BR>', $flags );
+				break;
 			default : $row[] = $val;
 		}
 	}
@@ -70,7 +79,7 @@ else
 			foreach ($g_payrule_keys as $payKey) {
 				$key .=  $payKey[0] . '=' . $zaznam[$payKey[0]] ?? '';
 			}
-			$configured[$key][$zaznam['finance_type']] = $zaznam;
+			$configured[$key][$zaznam['finance_type']][] = $zaznam;
 		}
 
 		$data_tbl = new html_table_mc();
@@ -82,7 +91,7 @@ else
 		foreach ( $configured as $records ) {
 			if ( array_key_exists ('', $records) ) {
 				// generic type configuration in column
-				$id = $records['']['id'];
+				$id = $records[''][0]['id'];
 				$data_tbl->set_header_col($col++,'<A HREF="./fin_payrule_edit.php?id='.$id.'" title="Editovat platby">&#9997;</A>&nbsp;/&nbsp;<A HREF="./fin_payrule_del_exc.php?id='.$id.'" onclick="return confirm_delete()" class="Erase" title="Smazat platby">&#10799;</A>',ALIGN_CENTER);
 			} else {
 				$data_tbl->set_header_col($col++, '',ALIGN_CENTER);
@@ -106,26 +115,39 @@ else
 			$row[] = $zaznam['id'];
 			$row[] = $zaznam['nazev'];
 			$row[] = nl2br ($zaznam['popis']);
-			$row[] = '<A HREF="./fin_type_edit.php?id='.$zaznam['id'].'" title="Editovat">&#9997;</A>&nbsp;/&nbsp;<A HREF="./fin_type_del_exc.php?id='.$zaznam['id'].'" onclick="return confirm_delete()" class="Erase" title="Smazat">&#10799;</A>';
+			$row[] = '<A HREF="./fin_type_edit.php?id='.$zaznam['id'].'" title="Editovat \''.$zaznam['nazev'].'\'">&#9997;</A>&nbsp;/&nbsp;<A HREF="./fin_type_del_exc.php?id='.$zaznam['id'].'" onclick="return confirm_delete()" class="Erase" title="Smazat \''.$zaznam['nazev'].'\'">&#10799;</A>';
 
 			foreach ( $configured as $key => $config ) {
-				$typedconfig = $config[$zaznam['id']] ?? $config[''] ?? null; // exact or undefined type
+				$typedconfigs = $config[$zaznam['id']] ?? $config[''] ?? null; // exact or undefined type
 
-				$val = '';
-				if ( $typedconfig ) {
-					switch ( $typedconfig['druh_platby'] ) {
-						case 'P' : $val = $typedconfig['platba'] . ' Kč'; break; // direct 
-						case 'R' : $val = "&Delta; ";                     // of difference
-						default :
-							$val .= $typedconfig['platba'] . '%'; // % of diference or whole
-					}				
-					if ( array_key_exists ( $zaznam['id'], $config) ) {
-						// multiple types, in place edit
-						$val = '<A HREF="./fin_payrule_edit.php?id='.$typedconfig['id'].'" title="Editovat">' .$val . '</A>&nbsp;/&nbsp;<A HREF="./fin_payrule_del_exc.php?id='.$typedconfig['id'].'" onclick="return confirm_delete()" class="Erase" title="Smazat">&#10799;</A>';
+				$valcell = '';
+
+				if ( $typedconfigs ) {
+					foreach ( $typedconfigs as $typedconfig ) {
+						$val = '';
+						if ( $typedconfig['uctovano'] != 0 && $typedconfig['uctovano'] !== null && $typedconfig['uctovano'] != 7 ) {
+							foreach ( $g_uctovano as $uct ) {
+								if ( ( $typedconfig['uctovano'] & $uct['id'] ) != 0 ) {
+									$val .= $uct['char'];
+								}
+							}
+						}
+						switch ( $typedconfig['druh_platby'] ) {
+
+							case 'P' : $val .= $typedconfig['platba'] . ' Kč'; break; // direct 
+							case 'R' : $val .= "&Delta; ";                     // of difference
+							default :
+								$val .= $typedconfig['platba'] . '%'; // % of diference or whole
+						}				
+						if ( array_key_exists ( $zaznam['id'], $config) ) {
+							// multiple types, in place edit
+							$val = '<A HREF="./fin_payrule_edit.php?id='.$typedconfig['id'].'" title="Editovat">' .$val . '</A>&nbsp;/&nbsp;<A HREF="./fin_payrule_del_exc.php?id='.$typedconfig['id'].'" onclick="return confirm_delete()" class="Erase" title="Smazat">&#10799;</A>';
+						}
+						$valcell .= $val . '<BR>';
 					}
 				}
 
-				$row[] = $val;
+				$row[] = $valcell;
 			}
 
 			echo $data_tbl->get_new_row_arr($row)."\n";

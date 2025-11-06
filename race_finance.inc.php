@@ -23,14 +23,79 @@ if ($vysledek_all === FALSE )
 	die('Chyba v databázi, kontaktuje administrátora.<br>');
 }
 
-//vytazeni informaci o zavode
-@$vysledek_race=query_db("select z.nazev, from_unixtime(z.datum, '%Y-%c-%e') datum from ".TBL_RACE." z where z.id = ".$race_id);
-$zaznam_race=mysqli_fetch_array($vysledek_race);
-
 DrawPageSubTitle('Vybraný závod');
 
+//vytazeni informaci o zavode
 @$vysledek_z=query_db('SELECT * FROM '.TBL_RACE." WHERE `id`='$race_id' LIMIT 1");
 $zaznam_z = mysqli_fetch_array($vysledek_z);
+
+$zebricek = ( $zaznam_z['zebricek'] ?? 0 );
+
+//payement rules ordered for iteration default last, exact term first
+$payrules = [];
+$sql = 'SELECT * FROM '.TBL_PAYRULES." WHERE (`typ`='" . $zaznam_z['typ'] .
+ "' OR `typ` is null ) and ( `typ0`='" . $zaznam_z['typ0'] . "' or `typ0` is null)" .
+" ORDER BY finance_type DESC"; // nulls last
+ @$vysledek_pay=query_db($sql);
+
+if ($vysledek_pay && $vysledek_pay->num_rows > 0) {
+    while ($row = $vysledek_pay->fetch_assoc()) {
+
+		// filter out by zebricek
+		if ($zebricek !== 0) {
+			//continue;
+		}
+
+		$financeType = $row['finance_type'];
+        $termin      = $row['termin'] ?? '';
+
+        // Ensure nested arrays are initialized
+        if (!isset($payrules[$financeType])) {
+            $payrules[$financeType] = [];
+        }
+
+		if (!isset($payrules[$financeType][$termin])) {
+			$payrules[$financeType][$termin] = [];
+		}
+
+		// Append a new triplet [zebricek, platba, druh_platby]
+		$payrules[$financeType][$termin][] = [
+			$row['zebricek'] ?? null,
+			$row['platba'] ?? null,
+			$row['druh_platby'] ?? null,
+			$row['uctovano'] ?? null,
+		];		
+    }
+}
+
+// sort termin positive, negative and empty e.g. 1,2,3,-1,-2,''
+foreach ($payrules as &$rulesByFinanceType) {
+    uksort($rulesByFinanceType, function($a, $b) {
+        // Handle empty values last
+        if ($a === '' && $b !== '') return 1;
+        if ($b === '' && $a !== '') return -1;
+
+        // Convert to integers for numeric comparison
+        $aInt = (int)$a;
+        $bInt = (int)$b;
+
+        // Positive values first, sorted ascending
+        if ($aInt >= 0 && $bInt < 0) return -1;
+        if ($aInt < 0 && $bInt >= 0) return 1;
+
+        // Both positive → ascending
+        if ($aInt > 0 && $bInt > 0) return $aInt <=> $bInt;
+
+        // Both negative → descending
+        if ($aInt < 0 && $bInt < 0) return $bInt <=> $aInt;
+
+        // Fallback (e.g., both empty strings)
+        return 0;
+    });
+}
+unset($rulesByFinanceType);
+
+$vysledek_pay?->free();
 
 require_once ("./url.inc.php");
 require_once ("./common_race.inc.php");
@@ -50,7 +115,7 @@ if ( !empty ( $ext_id ) && $connector!== null ) {
 
     // Get race info by race ID
 	$raceInfo = $connector->getRaceInfo($ext_id);
-
+var_dump($raceInfo);
     // Get race payement by race ID
 	$racePayement = $connector->getRacePayement($ext_id);
     if ( $racePayement == null ) {
@@ -265,6 +330,10 @@ function renderFormField(string $column, string $label, string $type = 'text', s
 	&nbsp;<br/>
 	<button onclick="fillTableFromInput('add',event)" title="Přičtení hodnot, poznámky odděleny /">Přidej</button><br/>
   </div>
+<div class="form-field">
+	&nbsp;<br/>
+	<button onclick="fillTableFromInput('payrule',event)" title="Vyplň platby podle pravidel">🪄</button>
+  </div>  
 <div class="form-field" style="margin-left: 10em">
 	&nbsp;<br/><button 
 	onclick="updateRowsByState((row, marker, state) => {
@@ -280,6 +349,7 @@ function renderFormField(string $column, string $label, string $type = 'text', s
 </div>
 
 <script>
+const payrules = <?php echo json_encode($payrules, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>;
 
 function markSelected (row, match) {
   const span = row.querySelector("td .state");

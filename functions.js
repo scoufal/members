@@ -302,6 +302,24 @@ function fillFinanceRow( row, perform, values ) {
 			if (colName === 'note') noteField = cell; // remember note cell
 			const newVal = values[colName];
 			let addVal = ''; // value in add format
+			if ( perform === 'payrule' ) {
+				const as = row.dataset.as ?? '';
+				if ( as == 0 ) { // only prihlaseni
+					const finType = row.dataset.fintype ?? '';	
+					const startTier = row.dataset.startTier ?? '';
+					for (const [financeType, terms] of Object.entries(payrules)) { //loop throught finance types
+						if ( financeType !== finType && financeType !== '' ) continue; // only matching type or default
+						for (const [termin, data] of Object.entries(terms)) { // loop through terms
+							if ( startTier && termin !== startTier && termin !== '' ) continue; // only matching tier or default
+							// Loop through all triplets [zebricek, platba, typ_platby]
+							for (const entry of data) {
+								const [zebricek, platba, typ_platby, uctovano] = entry;
+								console.log(`fintype=${financeType}, termin=${termin}  → zebříček=${zebricek}, platba=${platba}, typ_platby=${typ_platby}, uctovano=${uctovano}`);
+							}
+						}
+					}
+				}
+			}
 			if ( newVal == null ) addVal = '';
 			else if (!isNaN(newVal)) addVal = (Number(newVal) >= 0 ? "+" : "") + Number(newVal);
 			else addVal = '/' + newVal;
@@ -333,6 +351,7 @@ function fillFinanceRow( row, perform, values ) {
 						break;
 
 					case 'insert': // vlož
+					case 'payrule': // vlož podle pravidel
 					    if ( newVal ) {
 							let wasEmpty = false;
 							if (cell.tagName === "INPUT" || cell.tagName === "TEXTAREA") {
@@ -430,7 +449,7 @@ function fillTableFromInput(perform, event) {
 
 	document.querySelectorAll("tr td .state")
 		.forEach(input => {
-			if (input.classList.contains("selected") || input.classList.contains("pinned")) {
+			if (input.classList.contains("selected") || input.classList.contains("pinned") || perform === 'payrule') {
 				row = input.closest("tr");
 				fillFinanceRow(row,perform,values);
 			}
