@@ -73,7 +73,7 @@ function renderCheckboxRow(string $label, CheckboxRow $cbr): void
         $checked = !$is_new && (
             !isset($zaznam['termin']) ||
             $zaznam['termin'] == $t ||
-            ($zaznam['termin'] < 0 && $zaznam['termin'] > -$t)
+            ($zaznam['termin'] < 0 && $zaznam['termin'] >= -$t)
         );
         $cbr->addEntry($t, null, $t, $checked, true);
     }

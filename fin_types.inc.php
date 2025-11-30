@@ -9,6 +9,9 @@ DrawPageTitle('Přehled typů oddílových příspěvků a plateb');
 function confirm_delete() {
 	return confirm('Opravdu chcete smazat tento typ oddílového příspěvku?');
 }
+function confirm_delete_pay() {
+	return confirm('Opravdu chcete smazat tuto definici plateb?');
+}
 -->
 </script><?
 
@@ -92,7 +95,7 @@ else
 			if ( array_key_exists ('', $records) ) {
 				// generic type configuration in column
 				$id = $records[''][0]['id'];
-				$data_tbl->set_header_col($col++,'<A HREF="./fin_payrule_edit.php?id='.$id.'" title="Editovat platby">&#9997;</A>&nbsp;/&nbsp;<A HREF="./fin_payrule_del_exc.php?id='.$id.'" onclick="return confirm_delete()" class="Erase" title="Smazat platby">&#10799;</A>',ALIGN_CENTER);
+				$data_tbl->set_header_col($col++,'<A HREF="./fin_payrule_edit.php?id='.$id.'" title="Editovat platby">&#9997;</A>&nbsp;/&nbsp;<A HREF="./fin_payrule_del_exc.php?id='.$id.'" onclick="return confirm_delete_pay()" class="Erase" title="Smazat platby">&#10799;</A>',ALIGN_CENTER);
 			} else {
 				$data_tbl->set_header_col($col++, '',ALIGN_CENTER);
 			}
@@ -141,7 +144,7 @@ else
 						}				
 						if ( array_key_exists ( $zaznam['id'], $config) ) {
 							// multiple types, in place edit
-							$val = '<A HREF="./fin_payrule_edit.php?id='.$typedconfig['id'].'" title="Editovat">' .$val . '</A>&nbsp;/&nbsp;<A HREF="./fin_payrule_del_exc.php?id='.$typedconfig['id'].'" onclick="return confirm_delete()" class="Erase" title="Smazat">&#10799;</A>';
+							$val = '<A HREF="./fin_payrule_edit.php?id='.$typedconfig['id'].'" title="Editovat">' .$val . '</A>&nbsp;/&nbsp;<A HREF="./fin_payrule_del_exc.php?id='.$typedconfig['id'].'" onclick="return confirm_delete_pay()" class="Erase" title="Smazat">&#10799;</A>';
 						}
 						$valcell .= $val . '<BR>';
 					}

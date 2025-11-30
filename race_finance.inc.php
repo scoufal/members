@@ -32,7 +32,7 @@ $zaznam_z = mysqli_fetch_array($vysledek_z);
 $zebricek = ( $zaznam_z['zebricek'] ?? 0 );
 
 //payement rules ordered for iteration default last, exact term first
-$payrules = [];
+$pay = [];
 $sql = 'SELECT * FROM '.TBL_PAYRULES." WHERE (`typ`='" . $zaznam_z['typ'] .
  "' OR `typ` is null ) and ( `typ0`='" . $zaznam_z['typ0'] . "' or `typ0` is null)" .
 " ORDER BY finance_type DESC"; // nulls last
@@ -41,35 +41,31 @@ $sql = 'SELECT * FROM '.TBL_PAYRULES." WHERE (`typ`='" . $zaznam_z['typ'] .
 if ($vysledek_pay && $vysledek_pay->num_rows > 0) {
     while ($row = $vysledek_pay->fetch_assoc()) {
 
-		// filter out by zebricek
-		if ($zebricek !== 0) {
-			//continue;
-		}
-
 		$financeType = $row['finance_type'];
         $termin      = $row['termin'] ?? '';
 
         // Ensure nested arrays are initialized
-        if (!isset($payrules[$financeType])) {
-            $payrules[$financeType] = [];
+        if (!isset($pay['rule'][$financeType])) {
+            $pay['rule'][$financeType] = [];
         }
 
-		if (!isset($payrules[$financeType][$termin])) {
-			$payrules[$financeType][$termin] = [];
+		if (!isset($pay['rule'][$financeType][$termin])) {
+			$pay['rule'][$financeType][$termin] = [];
 		}
 
 		// Append a new triplet [zebricek, platba, druh_platby]
-		$payrules[$financeType][$termin][] = [
-			$row['zebricek'] ?? null,
-			$row['platba'] ?? null,
-			$row['druh_platby'] ?? null,
-			$row['uctovano'] ?? null,
+		$pay['rule'][$financeType][$termin][] = [
+			'zebricek'   => isset($row['zebricek']) ? (int)$row['zebricek'] : null,
+			'platba'     => isset($row['platba']) ? (int)$row['platba'] : null,
+			'druh'       => $row['druh_platby'] ?? null,
+			'uctovano'   => isset($row['uctovano']) ? (int)$row['uctovano'] : null,
+			'id'   		 => isset($row['id']) ? (int)$row['id'] : null,
 		];		
     }
 }
 
 // sort termin positive, negative and empty e.g. 1,2,3,-1,-2,''
-foreach ($payrules as &$rulesByFinanceType) {
+foreach ($pay['rule'] as &$rulesByFinanceType) {
     uksort($rulesByFinanceType, function($a, $b) {
         // Handle empty values last
         if ($a === '' && $b !== '') return 1;
@@ -111,12 +107,15 @@ require_once ("./connectors.php");
 $ext_id = $zaznam_z['ext_id'];
 $connector = ConnectorFactory::create();
 
+// definuj velikost oblasti podle mista klubu
+$raceInClubRegions = 0x0; // no matching regions
+
 if ( !empty ( $ext_id ) && $connector!== null ) {
 
     // Get race info by race ID
 	$raceInfo = $connector->getRaceInfo($ext_id);
-var_dump($raceInfo);
-    // Get race payement by race ID
+
+	// Get race payement by race ID
 	$racePayement = $connector->getRacePayement($ext_id);
     if ( $racePayement == null ) {
 		$racePayement = new RacePayement(0);
@@ -139,10 +138,42 @@ var_dump($raceInfo);
 
 		foreach ($racePayement->overview->categories as $category => $fees) {
 			echo "<td style='text-align:center;'>";
-			foreach ( $racePayement->overview->feeTiers as $tier => $exist ) {
-				echo ( $fees[$tier] ?? '-' ) . '<br/>';
+//			foreach ( $racePayement->overview->feeTiers as $tier => $exist ) {
+			for ( $tier = 1; $tier <= 3; $tier++ ) {
+				// If not set, initialize from raceInfo (if available), otherwise null
+				if ( !isset($fees[$tier])) {
+
+					switch ( $tier ) {
+						case 1 :
+							$fees[$tier] = $raceInfo->startovne[$category] ?? null;
+							break;
+						case 2 :
+							if ( $raceInfo->koeficient1 > 0 ) {
+								$fees[2] = $fees[1] + $fees[1] * $raceInfo->koeficient1 / 100;
+							} else { 
+								echo '&nbsp<br/>';
+								continue 2;
+							}
+							break;
+						case 3 :
+							if ( $raceInfo->koeficient2 > 0 ) {
+								$fees[3] = $fees[1] +$fees[1] * $raceInfo->koeficient2 / 100;
+							} else { 
+								echo '&nbsp<br/>';
+								continue 2;
+							}
+							break;
+						default :
+							$fees[$tier] = null;
+					}
+				}
+
+				echo ($fees[$tier] ?? '-') . "<br/>";
 			}
 			echo "</td>";
+
+			// for javascript rules processing
+			$pay['startFee'][$category] = $fees; // default fee for category
 		}
 
 		echo "</tr></table>";
@@ -180,6 +211,18 @@ var_dump($raceInfo);
 
 			echo "</tr></table>";
 		}
+
+		if (  isset($raceInfo->oblasti) && count($raceInfo->oblasti) > 0 ) {
+			if ( isset ($g_external_is_region_A ) && in_array($g_external_is_region_A, $raceInfo->oblasti)) {
+				$raceInClubRegions |= 0x01; // republika
+			}
+			if ( isset ($g_external_is_region_B ) && in_array($g_external_is_region_B, $raceInfo->oblasti)) {
+				$raceInClubRegions |= 0x06; // cechy nebo morava
+			}
+			if ( isset ($g_external_is_region_C ) && in_array($g_external_is_region_C, $raceInfo->oblasti)) {
+				$raceInClubRegions |= 0x08; // mistni liga
+			}
+		}
 	}
 } else {
 	$raceInfo = new RaceInfo(0);
@@ -211,18 +254,28 @@ function renderOrisFee(array $feeData): string {
 
 	$tierSuffix = '';
 	$title = '';
-    if ( !empty($feeData['membersonly']) ) {
-		$tierSuffix = 'P';
-		$title = ' title="Jen v members, ne v přihláškách v ' . $connector->getSystemName().'"';
-    }
+	if  ( $feeData['tier'] > 1 ) {
+		// later tier
+		$tierSuffix = $feeData['tier'];
+		$title = ' v ' . $tierSuffix . '. termínu';
+	}
+	if ( !empty($feeData['membersonly']) ) {
+		// only in members, not in oris
+		$tierSuffix .= 'P';
+		$title = ' title="Jen v members ' . $title . ', ne v přihláškách v ' . $connector->getSystemName(). '"';
+    } else {
+		if  ( $feeData['tier'] > 1 ) {
+			// later tier
+			$title = ' title="Závodník přihlášen ' . $title . '"';
+		}
+	}
 
-    if ($feeData['tier'] > 1 || !empty($tierSuffix) ) {
-        return '<span class="TextAlert"' . $title . '>' . $feeData['fee'] . '/' . $feeData['tier'] . $tierSuffix . '</span>';
+    if (!empty($tierSuffix) ) {
+        return '<span class="TextAlert"' . $title . '>' . $feeData['fee'] . '/' . $tierSuffix . '</span>';
     }
 
     return $feeData['fee'];
 }
-
 
 function getOrisClass($reg) : string {
 	global $g_shortcut;
@@ -256,7 +309,7 @@ $cbabf->addEntry('Ne', 'Závodník nebyl přidán', 0, true, true);
 
 ?>
 <div class="update-categories">
-<div class="sub-title">Naplň pouze vybrané kategorie pro přihlášené závodníky</div>
+<div class="sub-title">Naplní pole pro označené závodníky <span class="state selected">✔</span>,<span class="state pinned">📌</span>. Automatické vyplnění 🪄 vybere závodníky samočinně.</div>
 <div class="checkbox-row" data-key="cat"></div>
 <div class="checkbox-row" data-key="fintype"></div>
 <div class="checkbox-row">
@@ -320,25 +373,29 @@ function renderFormField(string $column, string $label, string $type = 'text', s
 ?>
   <div class="form-field">
 	&nbsp;<br/>
-	<button onclick="fillTableFromInput('overwrite',event)" title="Vložení hodnot do vybraných řádků">Přepiš</button><br/>
+	<button onclick="fillTableFromInput('overwrite',event)" title="Vložení hodnot do vybraných řádků">🔁</button><br/>
   </div>
   <div class="form-field">
 	&nbsp;<br/>
-	<button onclick="fillTableFromInput('insert',event)" title="Vložení hodnot pokud není vyplněna částka">Vlož</button><br/>
+	<button onclick="fillTableFromInput('insert',event)" title="Vložení hodnot pokud není vyplněna částka">📥</button><br/>
   </div>
   <div class="form-field">
 	&nbsp;<br/>
-	<button onclick="fillTableFromInput('add',event)" title="Přičtení hodnot, poznámky odděleny /">Přidej</button><br/>
+	<button onclick="fillTableFromInput('add',event)" title="Přičtení hodnot, poznámky odděleny /">➕</button><br/>
   </div>
 <div class="form-field">
 	&nbsp;<br/>
 	<button onclick="fillTableFromInput('payrule',event)" title="Vyplň platby podle pravidel">🪄</button>
   </div>  
+	<span id="wizardInfoBtn"
+		title="Wizard naplní prázdná pole podle pravidel u typu příspěvku. Kliknutím na toto &#9432; se vygeneruje tato stránka i s objasněním uplatněných pravidel u jmen závodníků."
+		style="cursor:pointer; margin-top:6px;font-size:1.1em;"
+	>&#9432; <!-- (i) info icon --></span>
 <div class="form-field" style="margin-left: 10em">
 	&nbsp;<br/><button 
 	onclick="updateRowsByState((row, marker, state) => {
 		if (state === 'selected') setSelectedState ( marker, 'pinned'); })" 
-	title="Připnutí vybraných řádků" style="white-space: nowrap"><span class="state selected">✔</span>=&gt;<span class="state pinned">📌</span></button>
+	title="Připnutí vybraných řádků" style="white-space: nowrap">✔=&gt;<span class="state pinned">📌</span></button>
   </div>
 <div class="form-field">
    &nbsp;<br/><button 	onclick="updateRowsByState((row, marker, state) => {
@@ -349,7 +406,7 @@ function renderFormField(string $column, string $label, string $type = 'text', s
 </div>
 
 <script>
-const payrules = <?php echo json_encode($payrules, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>;
+const pay = <?php echo json_encode($pay, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT); ?>;
 
 function markSelected (row, match) {
   const span = row.querySelector("td .state");
@@ -410,7 +467,34 @@ while ($zaznam=mysqli_fetch_assoc($vysledek_all))
 	$kat_id = $checkBoxRows['cat']->addEntry($kat,null,null,false,true);
 	
 	$id = $zaznam['id'];
-	
+
+	$attrs = [ 'class' => 'cat', 'data-cat' => $kat_id, 
+	    'data-participated' => $zaznam['participated']??0,
+		'data-addByFin' => $zaznam['add_by_fin']??0,
+		'data-fintype' => $zaznam['finance_type']??0,
+		'data-transport' => $zaznam['transport']??0,
+		'data-accommodation' => $zaznam['ubytovani']??0,
+		'data-as' => '0' ]; // participant	
+
+	$regFees = null;
+	if ( !empty ( $ext_id ) && $connector!== null ) {
+		// startovne z Orisu
+		$regFees = getOrisFee($zaznam['reg']);
+		if ( ( !isset ( $regFees ) || !$regFees['fee'] ) && 
+			isset($zaznam['kat']) && isset($raceInfo->startovne[$zaznam['kat']]) ) {
+			// z definice zavodu, jen pokud ma startujici kategorii				
+			$regFees['membersonly'] = true;
+			$regFees['fee'] = $raceInfo->startovne[$zaznam['kat']];
+			$regFees['tier'] = $zaznam['termin'];
+			if ( $zaznam['termin'] === 2 && $raceInfo->koeficient1 > 0 ) {
+				$regFees['fee'] += $regFees['fee'] * $raceInfo->koeficient1 / 100;
+			} else if ( $zaznam['termin'] === 3 && $raceInfo->koeficient2 > 0 ) {
+				$regFees['fee'] += $regFees['fee'] * $raceInfo->koeficient2 / 100;
+			}
+		}
+
+	}		
+
 	$row = array();
 	$row[] = '<span class="state unpinned">📌</span>';
 	$row[] = "<A href=\"javascript:open_win_ex('./view_address.php?id=".$zaznam["u_id"]."','',500,540)\" class=\"adr_name\">".$zaznam['sort_name']."</A>";
@@ -435,27 +519,11 @@ while ($zaznam=mysqli_fetch_assoc($vysledek_all))
 	$row_text .= '<input type="hidden" id="userid'.$i.'" name="userid'.$i.'" value="'.$zaznam["u_id"].'"/><input type="hidden" id="paymentid'.$i.'" name="paymentid'.$i.'" value="'.$zaznam["id"].'"/>'; 
 	$row[] = $row_text;
 
-	$regFees = null;
-	if ( !empty ( $ext_id ) && $connector!== null ) {
-		// startovne z Orisu
-		$regFees = getOrisFee($zaznam['reg']);
-		if ( isset ( $regFees ) && $regFees['fee'] ) {
-			// nalezeno v oris prihlasenych
-			$row[] = renderOrisFee($regFees);
-		} else if ($raceInfo->startovne[$zaznam['kat']] ) {
-			// z definice zavodu				
-			$regFees['membersonly'] = true;
-			$regFees['fee'] = $raceInfo->startovne[$zaznam['kat']];
-			$regFees['tier'] = $zaznam['termin'];
-			if ( $zaznam['termin'] === 2 && $raceInfo->koeficient1 > 0 ) {
-				$regFees['fee'] += $regFees['fee'] * $raceInfo->koeficient1 / 100;
-			} else if ( $zaznam['termin'] === 3 && $raceInfo->koeficient2 > 0 ) {
-				$regFees['fee'] += $regFees['fee'] * $raceInfo->koeficient2 / 100;
-			}
-			$row[] = renderOrisFee($regFees);
-		} else {
-			$row[] = '';
-		}
+	if ( isset ( $regFees ) ) {
+		// render startovne z Orisu
+		$row[] = renderOrisFee($regFees);
+	} else {
+		$row[] = '';
 	}
 
 	// startovne

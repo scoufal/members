@@ -77,11 +77,11 @@ class RacePayement {
         $this->participants[$user->regNo] = $user;
     }
 
-	public function addCategory(string $name, int $feeTier, $fee ): void {
+	public function addCategory(string $name, int $feeTier, int $fee ): void {
 		$this->overview->addCategory($name,$feeTier,$fee);
 	}
 
-	public function addService(string $name, $fee, $count ): void {
+	public function addService(string $name, int $fee, int $count ): void {
 		$this->overview->addService( $name, $fee, $count );
 	}
 }
@@ -96,7 +96,7 @@ class RaceOverview {
     /** @var array<int, bool> feeTier => exist */
     public array $feeTiers = [];
 
-    public function addCategory(string $name, int $feeTier, $fee ): void {
+    public function addCategory(string $name, int $feeTier, int $fee ): void {
 
 		if (!isset($this->categories[$name])) {
 			$this->categories[$name] = [];
@@ -107,7 +107,7 @@ class RaceOverview {
     	$this->feeTiers[$feeTier] = true;
     }
 
-    public function addService(string $name, $fee, $count ): void {
+    public function addService(string $name, int $fee, int $count ): void {
 		if ( isset ( $this->services[$name][$fee] ) ) {
         	$this->services[$name][$fee] += $count;
 		} else {
@@ -125,7 +125,7 @@ class RaceParticipant {
 	public $fee;
 	public int $feeTier;
 
-    public function __construct(string $regNo, string $classDesc, string $name, bool $rentSI, string|null $licence, $fee, int $feeTier) {
+    public function __construct(string $regNo, string $classDesc, string $name, bool $rentSI, string|null $licence, int $fee, int $feeTier) {
         $this->regNo = $regNo;
         $this->classDesc = $classDesc;
         $this->name = $name;
@@ -267,8 +267,8 @@ class OrisCZConnector implements ConnectorInterface {
 //				'prihlasky3' => '',
 //				'prihlasky4' => '',
 //				'prihlasky5' => '',
-				'koeficient1' => strtotime($raceData['EntryKoef2']),
-				'koeficient2' => strtotime($raceData['EntryKoef3']),
+				'koeficient1' => $raceData['EntryKoef2'],
+				'koeficient2' => $raceData['EntryKoef3'],
 				'etap' => $raceData['Stages'],
 //				'poznamka' => $poznamka,
 				'vicedenni' => ($raceData['Stages']>1?1:0),
@@ -353,10 +353,10 @@ class OrisCZConnector implements ConnectorInterface {
 					if (isset($entry['RegNo']) ) {
 						$racePayement->addPatricipant(
 							new RaceParticipant($entry['RegNo'], $entry['ClassDesc'], $entry['Name'],
-							 $entry['RentSI'], $entry['Licence'], $entry['Fee'], $entry['EntryStop']));
+							 $entry['RentSI'], $entry['Licence'], (int)$entry['Fee'], $entry['EntryStop']));
 					}
 					if (isset($entry['ClassDesc'])&&isset($entry['ClassDesc'])) {
-						$racePayement->addCategory($entry['ClassDesc'], $entry['EntryStop'], $entry['Fee']);
+						$racePayement->addCategory($entry['ClassDesc'], $entry['EntryStop'], (int)$entry['Fee']);
 					}
 				}
 			}
