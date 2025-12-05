@@ -228,6 +228,7 @@ if ( !empty ( $ext_id ) && $connector!== null ) {
 	$raceInfo = new RaceInfo(0);
 	$racePayement = new RacePayement(0);	
 }
+$pay['regionFlag'] = $raceInClubRegions;
 
 function getOrisFee($reg): array {
     global $g_shortcut, $racePayement;
@@ -464,17 +465,9 @@ while ($zaznam=mysqli_fetch_assoc($vysledek_all))
 	}
 
 	$kat = $zaznam['kat'];
-	$kat_id = $checkBoxRows['cat']->addEntry($kat,null,null,false,true);
+	$kat_id = $checkBoxRows['cat']->addEntry($kat,null,$kat,false,true);
 	
 	$id = $zaznam['id'];
-
-	$attrs = [ 'class' => 'cat', 'data-cat' => $kat_id, 
-	    'data-participated' => $zaznam['participated']??0,
-		'data-addByFin' => $zaznam['add_by_fin']??0,
-		'data-fintype' => $zaznam['finance_type']??0,
-		'data-transport' => $zaznam['transport']??0,
-		'data-accommodation' => $zaznam['ubytovani']??0,
-		'data-as' => '0' ]; // participant	
 
 	$regFees = null;
 	if ( !empty ( $ext_id ) && $connector!== null ) {
@@ -486,9 +479,9 @@ while ($zaznam=mysqli_fetch_assoc($vysledek_all))
 			$regFees['membersonly'] = true;
 			$regFees['fee'] = $raceInfo->startovne[$zaznam['kat']];
 			$regFees['tier'] = $zaznam['termin'];
-			if ( $zaznam['termin'] === 2 && $raceInfo->koeficient1 > 0 ) {
+			if ( $zaznam['termin'] == 2 && $raceInfo->koeficient1 > 0 ) {
 				$regFees['fee'] += $regFees['fee'] * $raceInfo->koeficient1 / 100;
-			} else if ( $zaznam['termin'] === 3 && $raceInfo->koeficient2 > 0 ) {
+			} else if ( $zaznam['termin'] == 3 && $raceInfo->koeficient2 > 0 ) {
 				$regFees['fee'] += $regFees['fee'] * $raceInfo->koeficient2 / 100;
 			}
 		}
@@ -582,7 +575,7 @@ do  {
 
 	if ( !empty ( $ext_id ) && $connector!== null ) {
 		$kat = getOrisClass($zaznam['reg']);
-		$kat_id = $checkBoxRows['cat']->addEntry($kat,null,null,false,true);
+		$kat_id = $checkBoxRows['cat']->addEntry($kat,null,$kat,false,true);
 		$attrs['data-cat'] = $kat_id;
 	}
 

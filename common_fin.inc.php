@@ -103,7 +103,7 @@ class CheckboxRow {
 		}
 
 		// create new entry
-        $id = $id ?? count($this->entries);
+        $id = ($id === '' ? 'None' : $id) ?? count($this->entries);
         $this->entries[$label] = $entry = [
             'label'   => $label,
             'title'   => $title,

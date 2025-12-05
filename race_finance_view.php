@@ -81,6 +81,8 @@ if (IsSet($payment))
 
 ob_end_flush(); // at the very start
 
+if (!isset($head_addons)) $head_addons = '';
+$head_addons .="\t".'<script src="finance.js" type="text/javascript"></script>'."\n";
 require_once ("./header.inc.php"); // header obsahuje uvod html a konci <BODY>
 require_once ("./common.inc.php");
 require_once ("./common_user.inc.php");

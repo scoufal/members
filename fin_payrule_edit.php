@@ -26,6 +26,8 @@ if ( !$is_new ) {
     $zaznam = mysqli_fetch_array($res);
 }
 
+if (!isset($head_addons)) $head_addons = ''; 
+$head_addons .="\t".'<script src="finance.js" type="text/javascript"></script>'."\n";
 require_once ("./header.inc.php");
 require_once ("./common.inc.php");
 require_once ("./common_fin.inc.php");
