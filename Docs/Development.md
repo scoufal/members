@@ -27,6 +27,16 @@ Dostupné služby:
 * [members](http://127.0.0.1:10100/members)
 * [phpMyAdmin](http://127.0.0.1:10101)
 
+Bank mock pro vývoj:
+
+```bash
+docker compose -p members-dev -f docker-compose.dev.yml exec web npm run mock:bank
+```
+
+* admin UI: [http://127.0.0.1:10300/__admin](http://127.0.0.1:10300/__admin)
+* API endpoint pro PHP konektor: `http://127.0.0.1:10300/rbcz/premium/api`
+* vývojová konfigurace v `docker/config/dev/_cfg.php` už používá `RaiffeisenbankMockConnector`
+
 ## Automatické testy
 
 V kořenovém adresáři `members` spusť:
