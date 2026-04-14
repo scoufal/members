@@ -232,6 +232,12 @@ async function ensureDatabase(): Promise<void> {
   }
 }
 
+async function closeDatabase(): Promise<void> {
+  if (pool) {
+    await pool.end();
+  }
+}
+
 async function seedInitialTransactions(): Promise<void> {
   const connection = await pool.getConnection();
   try {
@@ -362,8 +368,8 @@ function parseNumber(value: unknown, fallback: number): number {
 
 function normalizeTransactionInput(source: Record<string, unknown>): CreateTransactionInput {
   const amount = parseNumber(source.amount, NaN);
-  if (!(amount > 0)) {
-    throw new Error('Amount must be a positive number');
+  if (!Number.isFinite(amount) || amount === 0) {
+    throw new Error('Amount must be a non-zero number');
   }
 
   return {
@@ -599,7 +605,7 @@ function renderAdminPage(settings: MockSettings, transactions: TransactionRow[])
         <form method="post" action="/__admin/transactions">
           <div class="two-col">
             <label>Amount
-              <input type="number" step="0.01" min="0.01" name="amount" value="350.00" required />
+              <input type="number" step="0.01" name="amount" value="350.00" required />
             </label>
             <label>Account number
               <input type="text" name="accountNumber" value="${escapeHtml(config.defaultAccountNumber)}" />
@@ -693,6 +699,11 @@ function renderAdminPage(settings: MockSettings, transactions: TransactionRow[])
 
 async function main(): Promise<void> {
   await ensureDatabase();
+
+  if (process.argv.includes('--init-only')) {
+    await closeDatabase();
+    return;
+  }
 
   const app = express();
   app.use(express.json());

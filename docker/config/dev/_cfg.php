@@ -113,4 +113,11 @@ $g_bank_connector = 'RaiffeisenbankMockConnector';
 $g_bank_cert_path = '/path/to/cert.p12';
 $g_bank_cert_pass = 'cert_password';
 $g_bank_client_id = 'raiffeisen_client_id';
-$g_bank_account_number = '4067843369';?>
+$g_bank_account_number = '4067843369';
+$g_bank_sync_start_date = '';
+
+$g_cfg_date_path = '/tmp/members_cfg_date.php';
+if (file_exists($g_cfg_date_path)) {
+    require_once($g_cfg_date_path);
+}
+?>

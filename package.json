@@ -2,9 +2,11 @@
   "name": "members-playwright-tests",
   "private": true,
   "scripts": {
+    "mock:bank:init": "tsx mocks/bank/src/server.ts --init-only",
     "mock:bank": "tsx mocks/bank/src/server.ts",
     "mock:bank:watch": "tsx watch mocks/bank/src/server.ts",
     "test:e2e": "playwright test",
+    "test:e2e:bank-errors": "playwright test -c playwright.bank-errors.config.js",
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:ui": "playwright test --ui",
     "playwright:install": "playwright install chromium"

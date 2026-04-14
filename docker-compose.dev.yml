@@ -4,6 +4,7 @@ services:
       context: ./docker
       dockerfile: Dockerfile.srv
       target: dev
+    working_dir: /var/www/html/members
     ports:
       - "10100:10100"    #this line maps your pc port to the container port
       - "10300:10300"    # bank mock server UI and API
