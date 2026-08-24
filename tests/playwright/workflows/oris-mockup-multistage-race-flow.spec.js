@@ -2,7 +2,6 @@ const { test, expect } = require('@playwright/test');
 const { TEST_USERS } = require('../constants/users');
 const {
   getCurrentUser,
-  loginViaApi,
 } = require('../helpers/api');
 const {
   loginAs,
@@ -77,8 +76,7 @@ test.describe('ORIS Mockup Multistage Race Workflow', () => {
 
   test.beforeAll(async ({ browser, request }) => {
     state.run = createWorkflowRun('oris-mockup-multistage-race-flow');
-    state.memberToken = await loginViaApi(request, TEST_USERS.member);
-    state.memberUser = await getCurrentUser(request, state.memberToken);
+    state.memberUser = await getCurrentUser(browser, TEST_USERS.member);
 
     await createOrisMockUser(request, {
       userId: '29952',

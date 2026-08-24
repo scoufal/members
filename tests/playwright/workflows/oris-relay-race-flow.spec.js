@@ -3,7 +3,6 @@ const { TEST_USERS } = require('../constants/users');
 const {
   getCurrentUser,
   getRaceDetail,
-  loginViaApi,
 } = require('../helpers/api');
 const {
   loginAs,
@@ -66,10 +65,9 @@ test.describe(RELAY_RACE_WORKFLOW.name, () => {
 
   const state = {};
 
-  test.beforeAll(async ({ request }) => {
+  test.beforeAll(async ({ browser, request }) => {
     state.run = createWorkflowRun('relay-race-flow');
-    state.memberToken = await loginViaApi(request, TEST_USERS.member);
-    state.memberUser = await getCurrentUser(request, state.memberToken);
+    state.memberUser = await getCurrentUser(browser, TEST_USERS.member);
 
     state.mockRace = await createOrisMockRace(request, {
       name: `Playwright ORIS mock relay ${state.run.runId}`,
@@ -80,12 +78,12 @@ test.describe(RELAY_RACE_WORKFLOW.name, () => {
     state.orisId = String(state.mockRace.race.ID);
   });
 
-  test('registrar can load the mockup relay race into members', async ({ page, request }) => {
+  test('registrar can load the mockup relay race into members', async ({ page, request, browser }) => {
     await loginAs(page, 'registrar');
 
     state.race = await ensureOrisRace(page, state.orisId);
     const orisEvent = await getOrisApiEvent(request, state.orisId);
-    const detail = await getRaceDetail(request, state.race.id);
+    const detail = await getRaceDetail(browser, state.race.id);
 
     expect(Number(state.race.extId)).toBeGreaterThanOrEqual(25000);
     expect(Number(state.race.extId)).toBeLessThanOrEqual(999999);
@@ -119,7 +117,7 @@ test.describe(RELAY_RACE_WORKFLOW.name, () => {
     expect(await getOrisApiEventEntries(request, state.orisId)).toEqual([]);
   });
 
-  test('member can register to the imported mockup relay race locally', async ({ page, request }) => {
+  test('member can register to the imported mockup relay race locally', async ({ page, request, browser }) => {
     if (!state.race) {
       await loginAs(page, 'registrar');
       state.race = await ensureOrisRace(page, state.orisId);
@@ -141,7 +139,7 @@ test.describe(RELAY_RACE_WORKFLOW.name, () => {
     await page.goto(`./us_race_regon.php?id_zav=${state.race.id}&id_us=${state.memberUser.user_id}`);
     await expect(page.locator('input[name="kat"]')).toHaveValue(RELAY_RACE_WORKFLOW.memberCategory);
 
-    const detail = await getRaceDetail(request, state.race.id);
+    const detail = await getRaceDetail(browser, state.race.id);
     const entry = detail.everyone.find((item) => item.user_id === state.memberUser.user_id);
 
     expect(entry).toBeTruthy();
@@ -153,7 +151,7 @@ test.describe(RELAY_RACE_WORKFLOW.name, () => {
     expect(await getOrisApiEventEntries(request, state.orisId)).toEqual([]);
   });
 
-  test('member can unregister from the mockup relay race locally', async ({ page, request }) => {
+  test('member can unregister from the mockup relay race locally', async ({ page, request, browser }) => {
     await loginAs(page, 'member');
     await page.goto(`./us_race_regon.php?id_zav=${state.race.id}&id_us=${state.memberUser.user_id}`);
     await expect(page.getByRole('button', { name: 'Odhlásit ze závodu' })).toBeVisible();
@@ -164,7 +162,7 @@ test.describe(RELAY_RACE_WORKFLOW.name, () => {
       page.getByRole('button', { name: 'Odhlásit ze závodu' }).click(),
     ]);
 
-    const detail = await getRaceDetail(request, state.race.id);
+    const detail = await getRaceDetail(browser, state.race.id);
     const localEntry = detail.everyone.find((item) => item.user_id === state.memberUser.user_id);
     expect(localEntry).toBeUndefined();
     expect(await getOrisApiEventEntries(request, state.orisId)).toEqual([]);
@@ -199,7 +197,7 @@ test.describe(RELAY_RACE_WORKFLOW.name, () => {
     await expect(page.locator('input[name="prihlasky3"]')).toHaveValue(state.expiredEntryDates.third);
   });
 
-  test('member cannot register after the mockup relay race deadline', async ({ page, request }) => {
+  test('member cannot register after the mockup relay race deadline', async ({ page, request, browser }) => {
     await loginAs(page, 'member');
     await page.goto('./index.php?id=200&subid=2');
 
@@ -208,7 +206,7 @@ test.describe(RELAY_RACE_WORKFLOW.name, () => {
     await expect(raceRow.getByText('Přihl.', { exact: true })).toHaveCount(0);
     await expect(raceRow.getByText('Zobrazit', { exact: true })).toBeVisible();
 
-    const detail = await getRaceDetail(request, state.race.id);
+    const detail = await getRaceDetail(browser, state.race.id);
     expect(detail.everyone.find((item) => item.user_id === state.memberUser.user_id)).toBeUndefined();
     expect(await getOrisApiEventEntries(request, state.orisId)).toEqual([]);
   });

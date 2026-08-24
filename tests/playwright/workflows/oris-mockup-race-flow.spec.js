@@ -3,7 +3,6 @@ const { TEST_USERS } = require('../constants/users');
 const {
   getCurrentUser,
   getRaceDetail,
-  loginViaApi,
 } = require('../helpers/api');
 const {
   loginAs,
@@ -94,10 +93,9 @@ test.describe(ORIS_MOCKUP_RACE_WORKFLOW.name, () => {
 
   const state = {};
 
-  test.beforeAll(async ({ request }) => {
+  test.beforeAll(async ({ browser, request }) => {
     state.run = createWorkflowRun('oris-mockup-race-flow');
-    state.memberToken = await loginViaApi(request, TEST_USERS.member);
-    state.memberUser = await getCurrentUser(request, state.memberToken);
+    state.memberUser = await getCurrentUser(browser, TEST_USERS.member);
 
     await createOrisMockUser(request, {
       userId: ORIS_MOCKUP_RACE_WORKFLOW.memberOrisUserId,
@@ -165,7 +163,7 @@ test.describe(ORIS_MOCKUP_RACE_WORKFLOW.name, () => {
     expect(state.participants['7203']).toBeTruthy();
   });
 
-  test('member can register to the imported mockup ORIS race', async ({ page, request }) => {
+  test('member can register to the imported mockup ORIS race', async ({ page, request, browser }) => {
     if (!state.race) {
       await loginAs(page, 'registrar');
       state.race = await ensureOrisRace(page, state.orisId);
@@ -187,7 +185,7 @@ test.describe(ORIS_MOCKUP_RACE_WORKFLOW.name, () => {
     await page.goto(`./us_race_regon.php?id_zav=${state.race.id}&id_us=${state.memberUser.user_id}`);
     await expect(page.locator('input[name="kat"]')).toHaveValue(ORIS_MOCKUP_RACE_WORKFLOW.memberCategory);
 
-    const detail = await getRaceDetail(request, state.race.id);
+    const detail = await getRaceDetail(browser, state.race.id);
     const entry = detail.everyone.find((item) => item.user_id === state.memberUser.user_id);
 
     expect(entry).toBeTruthy();
@@ -225,7 +223,7 @@ test.describe(ORIS_MOCKUP_RACE_WORKFLOW.name, () => {
     expect(memberEntry.SI).toBe('1341431');
   });
 
-  test('member can unregister from the mockup ORIS race', async ({ page, request }) => {
+  test('member can unregister from the mockup ORIS race', async ({ page, request, browser }) => {
     await loginAs(page, 'member');
     await page.goto(`./us_race_regon.php?id_zav=${state.race.id}&id_us=${state.memberUser.user_id}`);
     await expect(page.getByRole('button', { name: 'Odhlásit ze závodu' })).toBeVisible();
@@ -236,7 +234,7 @@ test.describe(ORIS_MOCKUP_RACE_WORKFLOW.name, () => {
       page.getByRole('button', { name: 'Odhlásit ze závodu' }).click(),
     ]);
 
-    const detail = await getRaceDetail(request, state.race.id);
+    const detail = await getRaceDetail(browser, state.race.id);
     const localEntry = detail.everyone.find((item) => item.user_id === state.memberUser.user_id);
     expect(localEntry).toBeUndefined();
 
@@ -277,7 +275,7 @@ test.describe(ORIS_MOCKUP_RACE_WORKFLOW.name, () => {
     await expect(page.locator('input[name="prihlasky3"]')).toHaveValue(state.expiredEntryDates.third);
   });
 
-  test('member cannot register after the mockup ORIS race deadline', async ({ page, request }) => {
+  test('member cannot register after the mockup ORIS race deadline', async ({ page, request, browser }) => {
     await loginAs(page, 'member');
     await page.goto('./index.php?id=200&subid=2');
 
@@ -286,7 +284,7 @@ test.describe(ORIS_MOCKUP_RACE_WORKFLOW.name, () => {
     await expect(raceRow.getByText('Přihl.', { exact: true })).toHaveCount(0);
     await expect(raceRow.getByText('Zobrazit', { exact: true })).toBeVisible();
 
-    const detail = await getRaceDetail(request, state.race.id);
+    const detail = await getRaceDetail(browser, state.race.id);
     expect(detail.everyone.find((item) => item.user_id === state.memberUser.user_id)).toBeUndefined();
 
     const entries = await getOrisApiEventEntries(request, state.orisId);

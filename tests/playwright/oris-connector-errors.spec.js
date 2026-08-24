@@ -3,7 +3,6 @@ const { TEST_USERS } = require('./constants/users');
 const {
   getCurrentUser,
   getRaceDetail,
-  loginViaApi,
 } = require('./helpers/api');
 const {
   loginAs,
@@ -49,8 +48,8 @@ function memberEntry(entries, state) {
   ));
 }
 
-async function localMemberEntry(request, state) {
-  const detail = await getRaceDetail(request, state.race.id);
+async function localMemberEntry(browser, state) {
+  const detail = await getRaceDetail(browser, state.race.id);
   return detail.everyone.find((entry) => entry.user_id === state.memberUser.user_id);
 }
 
@@ -158,8 +157,7 @@ test.describe('Oris Connector Errors', () => {
 
     const run = createWorkflowRun('oris-connector-errors');
     state.runId = run.runId;
-    state.memberToken = await loginViaApi(request, TEST_USERS.member);
-    state.memberUser = await getCurrentUser(request, state.memberToken);
+    state.memberUser = await getCurrentUser(browser, TEST_USERS.member);
 
     const clubAdminContext = await browser.newContext();
     const clubAdminPage = await clubAdminContext.newPage();
@@ -290,7 +288,7 @@ test.describe('Oris Connector Errors', () => {
   });
 
   for (const failure of TRANSIENT_FAILURES) {
-    test(`registration creation remains pending for ${failure.name} and recovers`, async ({ page, request }) => {
+    test(`registration creation remains pending for ${failure.name} and recovers`, async ({ page, request, browser }) => {
       if (failure.slow) test.slow();
       await loginAs(page, 'member');
       await setOrisMockSettings(request, failure.settings);
@@ -305,7 +303,7 @@ test.describe('Oris Connector Errors', () => {
       expect(result.text).toContain('Synchronizace s ORIS se nezdařila (síťová chyba)');
 
       await setOrisMockSettings(request, { mode: 'normal' });
-      expect(await localMemberEntry(request, state)).toBeTruthy();
+      expect(await localMemberEntry(browser, state)).toBeTruthy();
       await expectRemoteMemberEntry(request, state, false);
 
       await submitRegistration(
@@ -317,13 +315,13 @@ test.describe('Oris Connector Errors', () => {
       await expectRemoteMemberEntry(request, state, true);
 
       await deleteRegistration(page, state);
-      expect(await localMemberEntry(request, state)).toBeUndefined();
+      expect(await localMemberEntry(browser, state)).toBeUndefined();
       await expectRemoteMemberEntry(request, state, false);
     });
   }
 
   for (const statusCode of CLIENT_ERROR_CODES) {
-    test(`registration creation rolls back for client error ${statusCode}`, async ({ page, request }) => {
+    test(`registration creation rolls back for client error ${statusCode}`, async ({ page, request, browser }) => {
       await loginAs(page, 'member');
       await setOrisMockSettings(request, {
         mode: 'force_client_error',
@@ -340,13 +338,13 @@ test.describe('Oris Connector Errors', () => {
       expect(result.text).toContain('Chyba při synchronizaci s ORIS');
 
       await setOrisMockSettings(request, { mode: 'normal' });
-      expect(await localMemberEntry(request, state)).toBeUndefined();
+      expect(await localMemberEntry(browser, state)).toBeUndefined();
       await expectRemoteMemberEntry(request, state, false);
     });
   }
 
   for (const failure of TRANSIENT_FAILURES) {
-    test(`registration deletion remains retryable for ${failure.name} and recovers`, async ({ page, request }) => {
+    test(`registration deletion remains retryable for ${failure.name} and recovers`, async ({ page, request, browser }) => {
       if (failure.slow) test.slow();
       await loginAs(page, 'member');
       await submitRegistration(
@@ -365,17 +363,17 @@ test.describe('Oris Connector Errors', () => {
       );
 
       await setOrisMockSettings(request, { mode: 'normal' });
-      expect(await localMemberEntry(request, state)).toBeTruthy();
+      expect(await localMemberEntry(browser, state)).toBeTruthy();
       await expectRemoteMemberEntry(request, state, true);
 
       await deleteRegistration(page, state);
-      expect(await localMemberEntry(request, state)).toBeUndefined();
+      expect(await localMemberEntry(browser, state)).toBeUndefined();
       await expectRemoteMemberEntry(request, state, false);
     });
   }
 
   for (const statusCode of CLIENT_ERROR_CODES) {
-    test(`registration deletion remains retryable for client error ${statusCode}`, async ({ page, request }) => {
+    test(`registration deletion remains retryable for client error ${statusCode}`, async ({ page, request, browser }) => {
       await loginAs(page, 'member');
       await submitRegistration(
         page,
@@ -393,11 +391,11 @@ test.describe('Oris Connector Errors', () => {
       expect(messages.some((message) => message.includes('Chyba při synchronizaci s ORIS'))).toBe(true);
 
       await setOrisMockSettings(request, { mode: 'normal' });
-      expect(await localMemberEntry(request, state)).toBeTruthy();
+      expect(await localMemberEntry(browser, state)).toBeTruthy();
       await expectRemoteMemberEntry(request, state, true);
 
       await deleteRegistration(page, state);
-      expect(await localMemberEntry(request, state)).toBeUndefined();
+      expect(await localMemberEntry(browser, state)).toBeUndefined();
       await expectRemoteMemberEntry(request, state, false);
     });
   }

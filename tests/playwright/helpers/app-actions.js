@@ -569,7 +569,7 @@ async function findRaceUserIdByReg(page, raceId, options = {}) {
   }, formatClubReg(options.reg));
 }
 
-async function createRace(page, request, overrides = {}) {
+async function createRace(page, overrides = {}) {
   if (overrides.categories === undefined) {
     throw new Error('Create race requires categories');
   }
@@ -606,15 +606,12 @@ async function createRace(page, request, overrides = {}) {
 
   ensureHtmlSubmission(result, 'Create race');
 
-  const race = await findRaceByName(request, overrides.name);
+  const race = await findRaceByName(page, overrides.name);
   if (!race) {
-    throw new Error(`Created race "${overrides.name}" was not found in API list`);
+    throw new Error(`Created race "${overrides.name}" was not found in the registrar race list`);
   }
 
-  return {
-    ...race,
-    id: race.race_id,
-  };
+  return race;
 }
 
 async function updateRace(page, raceId, overrides = {}) {

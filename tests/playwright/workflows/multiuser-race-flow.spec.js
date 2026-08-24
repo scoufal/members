@@ -6,7 +6,6 @@ const {
   getCurrentUser,
   getManagingUsers,
   getRaceDetail,
-  loginViaApi,
 } = require('../helpers/api');
 const {
   loginAs,
@@ -54,7 +53,7 @@ test.describe('Multi-User Race Workflow', () => {
 
   const state = {};
 
-  test.beforeAll(async ({ browser, request }) => {
+  test.beforeAll(async ({ browser }) => {
     state.run = createWorkflowRun('multi-user-race-flow');
 
     const today = new Date();
@@ -86,12 +85,10 @@ test.describe('Multi-User Race Workflow', () => {
       raceNameUpdated: `PW Training ${state.run.runId} v2`,
     };
 
-    state.memberToken = await loginViaApi(request, TEST_USERS.member);
-    state.memberUser = await getCurrentUser(request, state.memberToken);
+    state.memberUser = await getCurrentUser(browser, TEST_USERS.member);
 
-    state.smallManagerToken = await loginViaApi(request, TEST_USERS.smallManager);
-    state.smallManagerUser = await getCurrentUser(request, state.smallManagerToken);
-    state.smallManagerManagedUsers = await getManagingUsers(request, state.smallManagerToken);
+    state.smallManagerUser = await getCurrentUser(browser, TEST_USERS.smallManager);
+    state.smallManagerManagedUsers = await getManagingUsers(browser, TEST_USERS.smallManager);
     state.smallManagerManagedChild = state.smallManagerManagedUsers.find(
       (user) => user.user_id !== state.smallManagerUser.user_id
     );
@@ -116,7 +113,7 @@ test.describe('Multi-User Race Workflow', () => {
     const registrarContext = await browser.newContext();
     const registrarPage = await registrarContext.newPage();
     await loginAs(registrarPage, 'registrar');
-    state.race = await createRace(registrarPage, request, {
+    state.race = await createRace(registrarPage, {
       name: state.labels.raceName,
       note: state.labels.raceNoteInitial,
       entryDate1: entryDate1,
@@ -186,7 +183,7 @@ test.describe('Multi-User Race Workflow', () => {
     await accountantContext.close();
   });
 
-  test('member can register using the created race id', async ({ page, request }) => {
+  test('member can register using the created race id', async ({ page, browser }) => {
     await loginAs(page, 'member');
     await page.goto(`./us_race_regon.php?id_zav=${state.race.id}&id_us=${state.memberUser.user_id}`);
 
@@ -205,7 +202,7 @@ test.describe('Multi-User Race Workflow', () => {
     await expect(page.locator('input[name="kat"]')).toHaveValue('D21');
     await expect(page.locator('input[name="pozn"]')).toHaveValue(state.labels.memberNote);
 
-    const detail = await getRaceDetail(request, state.race.id);
+    const detail = await getRaceDetail(browser, state.race.id);
     const entry = detail.everyone.find((item) => item.user_id === state.memberUser.user_id);
 
     expect(entry).toBeTruthy();
@@ -234,7 +231,7 @@ test.describe('Multi-User Race Workflow', () => {
     await expect(page.locator('input[name="pozn"]')).toHaveValue(state.labels.memberNote);
   });
 
-  test('small manager can use the same shared race context', async ({ page, request }) => {
+  test('small manager can use the same shared race context', async ({ page, browser }) => {
     await loginAs(page, 'smallManager');
     await page.goto(`./race_regs_1.php?gr_id=600&id=${state.race.id}&show_ed=1`);
 
@@ -248,7 +245,7 @@ test.describe('Multi-User Race Workflow', () => {
       pozn2: 'manager internal',
     });
 
-    const detail = await getRaceDetail(request, state.race.id);
+    const detail = await getRaceDetail(browser, state.race.id);
     const entry = detail.everyone.find((item) => item.user_id === state.smallManagerManagedChild.user_id);
 
     expect(entry).toBeTruthy();
@@ -256,7 +253,7 @@ test.describe('Multi-User Race Workflow', () => {
     expect(entry.note).toBe(state.labels.managerNote);
   });
 
-  test('registrar can perform a second modification on the same race id', async ({ page, request }) => {
+  test('registrar can perform a second modification on the same race id', async ({ page, browser }) => {
     await loginAs(page, 'registrar');
 
     await updateRace(page, state.race.id, {
@@ -264,7 +261,7 @@ test.describe('Multi-User Race Workflow', () => {
       poznamka: state.labels.raceNoteUpdated,
     });
 
-    const detail = await getRaceDetail(request, state.race.id);
+    const detail = await getRaceDetail(browser, state.race.id);
 
     expect(detail.name).toBe(state.labels.raceNameUpdated);
   });

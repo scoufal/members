@@ -3,8 +3,8 @@ const { DEFAULT_PASSWORD } = require('../constants/auth');
 const { TEST_USERS } = require('../constants/users');
 const {
   getCurrentUser,
+  getManagingUsers,
   getRaceDetail,
-  loginViaApi,
 } = require('../helpers/api');
 const { login } = require('../components/login');
 const { loginAs } = require('../helpers/browser');
@@ -52,8 +52,8 @@ function orisDateTimeDaysAgo(days) {
   return date.toISOString().slice(0, 19).replace('T', ' ');
 }
 
-async function expectMemberEntryAbsent(request, state) {
-  const detail = await getRaceDetail(request, state.race.id);
+async function expectMemberEntryAbsent(browser, request, state) {
+  const detail = await getRaceDetail(browser, state.race.id);
   expect(detail.everyone.find((item) => item.user_id === state.memberUser.user_id)).toBeUndefined();
 
   const entries = await getOrisApiEventEntries(request, state.orisId);
@@ -70,8 +70,9 @@ test.describe(ORIS_MOCKUP_CONFLICT_WORKFLOW.name, () => {
 
   test.beforeAll(async ({ browser, request }) => {
     state.run = createWorkflowRun('oris-mockup-conflict-flow');
-    const zuzanaToken = await loginViaApi(request, TEST_USERS.member);
-    state.zuzanaUser = await getCurrentUser(request, zuzanaToken);
+    state.zuzanaUser = await getCurrentUser(browser, TEST_USERS.member);
+    const smallManager = await getCurrentUser(browser, TEST_USERS.smallManager);
+    state.zuzanaUser.chief_id = smallManager.user_id;
 
     const clubAdminContext = await browser.newContext();
     const clubAdminPage = await clubAdminContext.newPage();
@@ -93,12 +94,16 @@ test.describe(ORIS_MOCKUP_CONFLICT_WORKFLOW.name, () => {
     await setMemberSmallManager(managerPage, petr.userId, state.zuzanaUser.chief_id);
     await managerContext.close();
 
-    state.memberToken = await loginViaApi(request, ORIS_MOCKUP_CONFLICT_WORKFLOW.memberLogin, DEFAULT_PASSWORD);
-    state.memberUser = await getCurrentUser(request, state.memberToken);
+    state.memberUser = await getCurrentUser(
+      browser,
+      ORIS_MOCKUP_CONFLICT_WORKFLOW.memberLogin,
+      DEFAULT_PASSWORD
+    );
     expect(state.memberUser.name).toBe('Petr');
     expect(state.memberUser.surname).toBe('Novák');
     expect(String(state.memberUser.registration_number)).toBe(ORIS_MOCKUP_CONFLICT_WORKFLOW.memberReg);
-    expect(String(state.memberUser.chief_id)).toBe(String(state.zuzanaUser.chief_id));
+    expect((await getManagingUsers(browser, TEST_USERS.smallManager))
+      .some((user) => user.user_id === state.memberUser.user_id)).toBe(true);
 
     await createOrisMockUser(request, {
       userId: ORIS_MOCKUP_CONFLICT_WORKFLOW.memberOrisUserId,
@@ -159,7 +164,7 @@ test.describe(ORIS_MOCKUP_CONFLICT_WORKFLOW.name, () => {
     state.user7203EntryId = String(user7203Entry.ID);
   });
 
-  test('member registration with an undefined H18 category is refused', async ({ page, request }) => {
+  test('member registration with an undefined H18 category is refused', async ({ page, request, browser }) => {
     await login(page, ORIS_MOCKUP_CONFLICT_WORKFLOW.memberLogin, DEFAULT_PASSWORD);
     await page.goto(`./us_race_regon.php?id_zav=${state.race.id}&id_us=${state.memberUser.user_id}`);
     await expect(page.locator('body')).toContainText(state.race.name);
@@ -177,10 +182,10 @@ test.describe(ORIS_MOCKUP_CONFLICT_WORKFLOW.name, () => {
 
     expect(result.text).toContain('Chyba při synchronizaci s ORIS');
     expect(result.text).toContain(`Nelze spárovat kategorii '${ORIS_MOCKUP_CONFLICT_WORKFLOW.undefinedCategory}' s ORISem.`);
-    await expectMemberEntryAbsent(request, state);
+    await expectMemberEntryAbsent(browser, request, state);
   });
 
-  test('registrar cannot remove user 7203 after the API removes the ORIS entry', async ({ page, request }) => {
+  test('registrar cannot remove user 7203 after the API removes the ORIS entry', async ({ page, request, browser }) => {
     await deleteOrisMockRaceEntry(request, state.orisId, state.user7203EntryId);
 
     const remoteEntries = await getOrisApiEventEntries(request, state.orisId);
@@ -194,7 +199,7 @@ test.describe(ORIS_MOCKUP_CONFLICT_WORKFLOW.name, () => {
     expect(result.text).toContain('Chyby při synchronizaci s ORIS');
     expect(result.text).toContain('Entry not found');
 
-    const detail = await getRaceDetail(request, state.race.id);
+    const detail = await getRaceDetail(browser, state.race.id);
     const user7203LocalEntry = detail.everyone.find((entry) => String(entry.user_id) === String(state.user7203.userId));
     expect(user7203LocalEntry).toBeTruthy();
     expect(user7203LocalEntry.category).toBe(ORIS_MOCKUP_CONFLICT_WORKFLOW.user7203Category);
@@ -212,7 +217,7 @@ test.describe(ORIS_MOCKUP_CONFLICT_WORKFLOW.name, () => {
     expect(event.Classes.map((raceClass) => raceClass.Name)).not.toContain(ORIS_MOCKUP_CONFLICT_WORKFLOW.undefinedCategory);
   });
 
-  test('member registration with a defined category after the ORIS deadline is refused', async ({ page, request }) => {
+  test('member registration with a defined category after the ORIS deadline is refused', async ({ page, request, browser }) => {
     await login(page, ORIS_MOCKUP_CONFLICT_WORKFLOW.memberLogin, DEFAULT_PASSWORD);
     await page.goto(`./us_race_regon.php?id_zav=${state.race.id}&id_us=${state.memberUser.user_id}`);
     await expect(page.locator('body')).toContainText(state.race.name);
@@ -230,6 +235,6 @@ test.describe(ORIS_MOCKUP_CONFLICT_WORKFLOW.name, () => {
 
     expect(result.text).toContain('Chyba při synchronizaci s ORIS');
     expect(result.text).toContain('Mimo termín přihlášek');
-    await expectMemberEntryAbsent(request, state);
+    await expectMemberEntryAbsent(browser, request, state);
   });
 });

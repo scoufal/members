@@ -2,7 +2,6 @@ const { test, expect } = require('@playwright/test');
 const { TEST_USERS } = require('../constants/users');
 const {
   getCurrentUser,
-  loginViaApi,
 } = require('../helpers/api');
 const {
   loginAs,
@@ -60,10 +59,9 @@ test.describe('Local Multistage Race Workflow', () => {
 
   const state = {};
 
-  test.beforeAll(async ({ browser, request }) => {
+  test.beforeAll(async ({ browser }) => {
     state.run = createWorkflowRun('local-multistage-race-flow');
-    const memberToken = await loginViaApi(request, TEST_USERS.member);
-    state.memberUser = await getCurrentUser(request, memberToken);
+    state.memberUser = await getCurrentUser(browser, TEST_USERS.member);
 
     const clubAdminContext = await browser.newContext();
     const clubAdminPage = await clubAdminContext.newPage();
@@ -78,9 +76,9 @@ test.describe('Local Multistage Race Workflow', () => {
     state.raceName = `PW local multistage ${state.run.runId}`;
   });
 
-  test('registrar creates a local three-stage race', async ({ page, request }) => {
+  test('registrar creates a local three-stage race', async ({ page }) => {
     await loginAs(page, 'registrar');
-    state.race = await createRace(page, request, {
+    state.race = await createRace(page, {
       name: state.raceName,
       date: formatCzDate(state.firstRaceDate),
       endDate: formatCzDate(addUtcDays(state.firstRaceDate, 2)),
