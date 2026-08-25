@@ -33,6 +33,7 @@ div.form-field {
 /* row with checkboxes for filter */
 .checkbox-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.5em; /* spacing between items */
 }

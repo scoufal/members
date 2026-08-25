@@ -6,7 +6,7 @@
 $query_all = "SELECT 
     u.id AS u_id, u.sort_name, u.reg, u.finance_type,
 	f.id, f.amount, f.note,
-	zu.id AS zu_id, zu.kat, zu.termin, zu.transport, zu.ubytovani, zu.participated, zu.add_by_fin
+	zu.id AS zu_id, zu.kat, zu.termin, zu.transport, zu.ubytovani, zu.participated, zu.add_by_fin, zu.pozn, zu.pozn_in
 FROM ".TBL_USER." u
 LEFT JOIN ".TBL_ZAVXUS." zu
        ON u.id = zu.id_user 
@@ -287,6 +287,7 @@ function getOrisClass($reg) : string {
 
 require_once ('./common_fin.inc.php');
 $enable_fin_types = IsFinanceTypeTblFilled();
+$enable_reg_notes = ($zaznam_z['typ0'] === 'N'); // Nákup oblečení - zobraz poznámky k přihlášce (např. počet kusů)
 
 $checkBoxRows = []; // rows of check boxes
 $checkBoxRows['cat'] = new CheckboxRow ( 'Kategorie', 'cat' );
@@ -433,6 +434,10 @@ $data_tbl->set_header_col($col++,'Jméno',ALIGN_LEFT);
 $data_tbl->set_header_col($col++,'Částka',ALIGN_LEFT);
 $data_tbl->set_header_col($col++,'Poznámka',ALIGN_LEFT);
 $data_tbl->set_header_col($col++,'Kategorie',ALIGN_CENTER);
+if ($enable_reg_notes) {
+	$data_tbl->set_header_col_with_help($col++,'Pozn. (do přihlášky)',ALIGN_LEFT,'Poznámka závodníka k přihlášce (např. počet kusů oblečení)');
+	$data_tbl->set_header_col_with_help($col++,'Pozn. (interní)',ALIGN_LEFT,'Interní poznámka k přihlášce');
+}
 if ($enable_fin_types)
 	$data_tbl->set_header_col_with_help($col++,'Typ o.p.',ALIGN_CENTER,'Typ oddílových příspěvků');
 $data_tbl->set_header_col($col++,'Možnosti',ALIGN_CENTER);
@@ -509,6 +514,10 @@ while ($zaznam=mysqli_fetch_assoc($vysledek_all))
 	$row[] = $input_note;
 
 	$row[] = '<input type="text" class="cat" id="cat'.$i.'" name="cat'.$i.'" size="6" maxlength="10" value="'.$kat.'" />';
+	if ($enable_reg_notes) {
+		$row[] = htmlspecialchars($zaznam['pozn'] ?? '');
+		$row[] = htmlspecialchars($zaznam['pozn_in'] ?? '');
+	}
 	if ($enable_fin_types) {
 		$fintype = $zaznam['finance_type'] ?? '0'; 
 		$row[] = $checkBoxRows['fintype']->getLabel($fintype) ?? '-';
@@ -602,6 +611,10 @@ do  {
 
 	$row[] = $kat;
 
+	if ($enable_reg_notes) {
+		$row[] = htmlspecialchars($zaznam['pozn'] ?? '');
+		$row[] = htmlspecialchars($zaznam['pozn_in'] ?? '');
+	}
 	if ($enable_fin_types) {
 		$fintype = $zaznam['finance_type'] ?? 0; 
 		$row[] = $checkBoxRows['fintype']->getLabel($fintype) ?? '-';
@@ -690,6 +703,10 @@ do {
 	
 	$row[] = $kat;
 
+	if ($enable_reg_notes) {
+		$row[] = htmlspecialchars($zaznam['pozn'] ?? '');
+		$row[] = htmlspecialchars($zaznam['pozn_in'] ?? '');
+	}
 	if ($enable_fin_types) {
 		$fintype = $zaznam['finance_type'] ?? 0; 
 		$row[] = $checkBoxRows['fintype']->getLabel($fintype) ?? '-';
