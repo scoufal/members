@@ -6,6 +6,7 @@ const {
 } = require('./helpers/api');
 const {
   loginAs,
+  openPopup,
 } = require('./helpers/browser');
 const {
   ensureClubMember,
@@ -15,9 +16,11 @@ const {
   createOrisMockRace,
   createOrisMockUser,
   getOrisApiClubUserList,
+  getOrisApiEvent,
   getOrisApiEventEntries,
   getOrisMockSettings,
   setOrisMockSettings,
+  updateOrisMockRace,
 } = require('./helpers/oris-mock');
 const {
   ensureOrisRace,
@@ -87,6 +90,39 @@ async function submitRegistration(page, state, note, expectedOutcome) {
     pozn: note,
     pozn2: `internal ${note}`,
   }, { expectedOutcome });
+}
+
+async function ensureSeededRace(browser, state) {
+  if (state.race) {
+    return state.race;
+  }
+
+  const registrarContext = await browser.newContext();
+  const registrarPage = await registrarContext.newPage();
+  try {
+    await loginAs(registrarPage, 'registrar');
+    state.race = await ensureOrisRace(registrarPage, state.orisId);
+    return state.race;
+  } finally {
+    await registrarContext.close();
+  }
+}
+
+async function openSignupPopup(page, state) {
+  await page.goto('./index.php?id=200&subid=2');
+  return openPopup(page, () => page.evaluate(({ raceId, userId }) => {
+    window.open(`./us_race_regon.php?id_zav=${raceId}&id_us=${userId}`, '');
+  }, { raceId: state.race.id, userId: state.memberUser.user_id }));
+}
+
+async function submitSignupPopup(popup, category, note) {
+  await popup.locator('input[name="kat"]').fill(category);
+  await expect(popup.locator('input[name="kat"]')).toHaveValue(category);
+  await popup.locator('input[name="pozn"]').fill(note);
+  await Promise.all([
+    popup.waitForNavigation({ waitUntil: 'domcontentloaded' }),
+    popup.locator('form[name="form1"] input[type="submit"]').click(),
+  ]);
 }
 
 async function expectRemoteMemberEntry(request, state, expected) {
@@ -196,6 +232,8 @@ test.describe('Oris Connector Errors', () => {
     const mockRace = await createOrisMockRace(request, {
       name: `Playwright ORIS connector errors ${run.runId}`,
       place: `Playwright ORIS error place ${run.runId}`,
+      date: '2030-06-30',
+      entryDate1: '2030-06-20 12:00:00',
       classes: [
         { Name: state.memberCategory, Fee: 150 },
         { Name: 'H21C', Fee: 150 },
@@ -285,6 +323,80 @@ test.describe('Oris Connector Errors', () => {
     expect(state.race.name).toBe(state.raceName);
     expect(state.race.place).toBe(state.racePlace);
     expect(state.race.extId).toBe(state.orisId);
+  });
+
+  test('signup popup stays open with a retryable warning when ORIS closes the connection', async ({ page, request, browser }) => {
+    await ensureSeededRace(browser, state);
+
+    await loginAs(page, 'member');
+    let popup;
+    let registrationSubmitted = false;
+    try {
+      popup = await openSignupPopup(page, state);
+      await expect(popup.locator('input[name="kat"]')).toBeVisible();
+
+      await setOrisMockSettings(request, { mode: 'close_connection' });
+      await submitSignupPopup(popup, state.memberCategory, `popup retry ${state.runId}`);
+      registrationSubmitted = true;
+
+      await expect(popup.getByText('Synchronizace s ORIS se nezdařila (síťová chyba)')).toBeVisible();
+      await expect(popup.getByRole('link', { name: 'Zpět na přehled' })).toBeVisible();
+      expect(popup.isClosed()).toBe(false);
+    } finally {
+      await setOrisMockSettings(request, { mode: 'normal' });
+      if (popup && !popup.isClosed()) {
+        await popup.close();
+      }
+      if (registrationSubmitted) {
+        await submitRegistration(
+          page,
+          state,
+          `cleanup popup retry ${state.runId}`,
+          'overview'
+        );
+        await deleteRegistration(page, state);
+      }
+    }
+  });
+
+  test('registration creation rolls back when the category is absent from ORIS', async ({ page, request, browser }) => {
+    await ensureSeededRace(browser, state);
+    await loginAs(page, 'member');
+
+    const category = 'NO_ORIS';
+    const popup = await openSignupPopup(page, state);
+    await submitSignupPopup(popup, category, `missing category ${state.runId}`);
+
+    await expect(popup.getByText('Chyba při synchronizaci s ORIS')).toBeVisible();
+    await expect(popup.getByText(`Nelze spárovat kategorii '${category}' s ORISem.`)).toBeVisible();
+    await popup.close();
+    expect(await localMemberEntry(browser, state)).toBeUndefined();
+    await expectRemoteMemberEntry(request, state, false);
+  });
+
+  test('registration creation rolls back when ORIS denies a valid category after its deadline', async ({ page, request, browser }) => {
+    await ensureSeededRace(browser, state);
+    const event = await getOrisApiEvent(request, state.orisId);
+    const originalEntryDate1 = event.EntryDate1;
+    try {
+      await updateOrisMockRace(request, state.orisId, {
+        entryDate1: '2020-06-20 12:00:00',
+      });
+      await loginAs(page, 'member');
+
+      const popup = await openSignupPopup(page, state);
+      await submitSignupPopup(popup, state.memberCategory, `ORIS denial ${state.runId}`);
+
+      await expect(popup.getByText('Chyba při synchronizaci s ORIS')).toBeVisible();
+      await expect(popup.getByText('Mimo termín přihlášek')).toBeVisible();
+      await popup.close();
+      expect(await localMemberEntry(browser, state)).toBeUndefined();
+      await expectRemoteMemberEntry(request, state, false);
+    } finally {
+      await updateOrisMockRace(request, state.orisId, {
+        entryDate1: originalEntryDate1,
+      });
+    }
   });
 
   for (const failure of TRANSIENT_FAILURES) {

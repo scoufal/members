@@ -61,12 +61,8 @@ function bulkStageCheckbox(popup, reg, stage) {
 }
 
 async function saveRegistrationAndExpectClose(popup) {
-  await Promise.all([
-    popup.waitForNavigation({ waitUntil: 'domcontentloaded' }),
-    popup.locator('form[name="form1"] input[type="submit"]').click(),
-  ]);
-  await popup.close();
-  expect(popup.isClosed()).toBe(true);
+  await popup.locator('form[name="form1"] input[type="submit"]').click();
+  await expect.poll(() => popup.isClosed()).toBe(true);
 }
 
 test.describe('ORIS Mockup Multistage Race Workflow', () => {

@@ -177,7 +177,12 @@ if (!empty($sync_error_msg)) { ?>
 		<a href="<?php echo htmlspecialchars($return_url); ?>">Zpět na přehled</a>
 	</div>
 	<SCRIPT LANGUAGE="JavaScript">window.opener.location.reload();</SCRIPT>
-<?php } else {
-	header("Location: $return_url");
-	exit;
-} ?>
+<?php } else { ?>
+	<SCRIPT LANGUAGE="JavaScript">
+	<!--
+		window.opener.location.reload();
+		window.opener.focus();
+		window.close();
+	//-->
+	</SCRIPT>
+<?php } ?>
