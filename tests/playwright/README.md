@@ -14,12 +14,13 @@ These files are not part of the PHP runtime and must not be deployed to the prod
    ```bash
    npm run test:e2e
    ```
-4. Repeat the non-ORIS workflows with ORIS fully disabled or with only its club key omitted:
+4. Run alternate configuration suites:
    ```bash
    npm run test:e2e:no-oris
    npm run test:e2e:no-oris-key
+   npm run test:e2e:no-race-services
    ```
-   These command-line-only suites send a test header understood only by the committed Docker autotest configuration. They keep the ORIS mock process and health endpoint running, temporarily select the required mock mode, and restore its exact previous mode, status code, and delay after the run.
+   These command-line-only suites send a test header understood only by the committed Docker autotest configuration. The ORIS suites repeat non-ORIS workflows with ORIS disabled or its club key omitted, temporarily select the required mock mode, and restore its previous mode, status code, and delay after the run. The no-race-services suite runs dedicated checks with transport and accommodation disabled and does not change mock settings.
 5. Run the manual-only bank connector error suite:
    ```bash
    npm run test:e2e:bank-errors
@@ -37,6 +38,7 @@ These files are not part of the PHP runtime and must not be deployed to the prod
 - `PLAYWRIGHT_BASE_URL` overrides the application URL. Default: `http://web:10100/members/`
 - `MEMBERS_E2E_SUITE=no-oris` disables all ORIS configuration for application requests and makes mock `/API` return HTTP 503
 - `MEMBERS_E2E_SUITE=no-oris-key` leaves ORIS enabled but omits `$g_oris_club_key` for application requests
+- `MEMBERS_E2E_SUITE=no-race-services` disables transport and accommodation through the autotest request header, without changing ORIS or mock settings. It runs only the dedicated service-suppression spec (plus the shared user setup), covering single-day/multistage creation and editing, member registration, and race listings. Ordinary registration deadlines remain available. Fixtures own race IDs 24000–24004 from the 24000–25000 test range and suite-specific created race names, and clean up before and after each test. Run the command twice to check repeatability. This configuration and all fixtures are dev/test/CI-only and must not be deployed into the productive web root.
 - The reusable login helper lives in `tests/playwright/components/login.js`
 - Shared auth constants live in `tests/playwright/constants/auth.js`
   - `DEFAULT_PASSWORD` = `54321`

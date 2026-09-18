@@ -62,6 +62,7 @@ docker compose -p members-autotest -f docker-compose.autotest.yml up -d --build 
 docker compose -p members-autotest -f docker-compose.autotest.yml exec web npm run test:e2e
 docker compose -p members-autotest -f docker-compose.autotest.yml exec web npm run test:e2e:no-oris
 docker compose -p members-autotest -f docker-compose.autotest.yml exec web npm run test:e2e:no-oris-key
+docker compose -p members-autotest -f docker-compose.autotest.yml exec web npm run test:e2e:no-race-services
 docker compose -p members-autotest -f docker-compose.autotest.yml exec web npm run test:e2e:bank-errors
 docker compose -p members-autotest -f docker-compose.autotest.yml exec web npm run test:e2e:oris-errors
 docker compose -p members-autotest -f docker-compose.autotest.yml down

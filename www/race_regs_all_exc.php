@@ -46,8 +46,11 @@ $is_sdil_dopr_on = ($zaznam_z["transport"]==3);
 $is_spol_ubyt_on = ($zaznam_z["ubytovani"]==1);
 
 $termin = raceterms::GetCurr4RegTerm($zaznam_z);
+$registrationOpen = RaceRegistrationTerm($zaznam_z) !== 0;
 $has_ext_id = !empty($zaznam_z['ext_id']);
+$sync_allowed = $has_ext_id && $registrationOpen;
 $sync_queue = [];
+$local_only_changes = false;
 
 // vicedenni (etapovy) zavod - vyber etap se preberě ze zaskrtavatek, pokud nejsou
 // vyplnene (napr. radek zamceny/needitovatelny), zustava puvodni vyber zachovan
@@ -78,7 +81,8 @@ while ($zaznamZ=mysqli_fetch_array($vysledek))
 			$trans = 'NULL';
 			$sedl = 'NULL';
 		}
-		$ubyt = ($is_spol_ubyt_on && IsSet($ubytovani[$user])) ? 1 : 'NULL';
+		$ubyt = ($is_spol_ubyt_on && IsSet($ubytovani[$user])) || (int)$zaznam_z['ubytovani'] === 2 ? 1 : 'NULL';
+		if ((int)$zaznam_z['transport'] === 2) $trans = 1;
 		if($is_registrator_on)
 		{
 			if($is_termin_edit_on && $term[$user] != 0)
@@ -109,7 +113,7 @@ while ($zaznamZ=mysqli_fetch_array($vysledek))
 			{	// del
 				$is_pending_create = ($row_zx && $row_zx['sync_status'] === 'PENDING_CREATE');
 
-				if ($has_ext_id && !$is_pending_create) {
+				if ($sync_allowed && !$is_pending_create) {
 					$result=query_db("UPDATE ".TBL_ZAVXUS." SET sync_status='PENDING_DELETE' WHERE id_zavod = '$id' AND id_user = '$user'")
 						or die("Chyba při provádění dotazu do databáze.");
 					$sync_queue[] = ['id' => $zx_id, 'action' => 'delete', 'previous_state' => $row_zx];
@@ -118,6 +122,7 @@ while ($zaznamZ=mysqli_fetch_array($vysledek))
 						or die("Chyba při provádění dotazu do databáze.");
 					if ($result !== false && mysqli_affected_rows($db_conn) > 0) {
 						query_db("UPDATE ".TBL_RACE." SET prihlasenych = GREATEST(0, prihlasenych - 1) WHERE id = '$id'");
+						if ($has_ext_id && !$registrationOpen) $local_only_changes = true;
 					}
 				}
 				if ($result == FALSE)
@@ -131,7 +136,9 @@ while ($zaznamZ=mysqli_fetch_array($vysledek))
 				$cterm=correct_sql_string($cterm);
 			
 				$sync_status_update = "";
-				if ($has_ext_id && $row_zx && $row_zx['sync_status'] !== 'PENDING_CREATE') {
+				if ($has_ext_id && !$registrationOpen) {
+					$sync_status_update = ", sync_status='LOCAL_ONLY'";
+				} elseif ($sync_allowed && $row_zx && $row_zx['sync_status'] !== 'PENDING_CREATE') {
 					$sync_status_update = ", sync_status='PENDING_UPDATE'";
 				}
 
@@ -139,8 +146,9 @@ while ($zaznamZ=mysqli_fetch_array($vysledek))
 					or die("Chyba při provádění dotazu do databáze.");
 				if ($result == FALSE)
 					die ("Nepodařilo se změnit přihlášku člena.");
+				if ($has_ext_id && !$registrationOpen) $local_only_changes = true;
 
-				if ($has_ext_id && $zx_id) {
+				if ($sync_allowed && $zx_id) {
 					$action = ($row_zx['sync_status'] === 'PENDING_CREATE') ? 'create' : 'update';
 					$sync_queue[] = ['id' => $zx_id, 'action' => $action, 'previous_state' => $row_zx];
 				}
@@ -162,7 +170,7 @@ while ($zaznamZ=mysqli_fetch_array($vysledek))
 					$etapy_sql = 'NULL';
 				}
 
-				$sync_status = $has_ext_id ? 'PENDING_CREATE' : 'LOCAL_ONLY';
+				$sync_status = $sync_allowed ? 'PENDING_CREATE' : 'LOCAL_ONLY';
 
 				$result=query_db("INSERT INTO ".TBL_ZAVXUS." (id_user, id_zavod, kat, pozn, pozn_in, termin, transport, sedadel,ubytovani, etapy, sync_status) VALUES ('$user','$id','$kat','$poz','$poz2','$cterm',$trans,$sedl,$ubyt,".$etapy_sql.",'$sync_status')")
 					or die("Chyba při provádění dotazu do databáze.");
@@ -171,7 +179,8 @@ while ($zaznamZ=mysqli_fetch_array($vysledek))
 				if ($result !== false && mysqli_affected_rows($db_conn) > 0) {
 					$inserted_id = mysqli_insert_id($db_conn);
 					query_db("UPDATE ".TBL_RACE." SET prihlasenych = prihlasenych + 1 WHERE id = '$id'");
-					if ($has_ext_id) {
+					if ($has_ext_id && !$registrationOpen) $local_only_changes = true;
+					if ($sync_allowed) {
 						$sync_queue[] = ['id' => $inserted_id, 'action' => 'create', 'is_new_insert' => true];
 					}
 				}
@@ -182,7 +191,10 @@ while ($zaznamZ=mysqli_fetch_array($vysledek))
 
 $sync_errors = [];
 $sync_warns = [];
-if ($has_ext_id && count($sync_queue) > 0) {
+if ($local_only_changes) {
+	$sync_warns[] = 'Změny přihlášek byly uloženy pouze lokálně. Termín přihlášek již vypršel, proto změny nebyly odeslány do ORIS. Změny v ORIS je nutné vyřešit samostatně.';
+}
+if ($sync_allowed && count($sync_queue) > 0) {
 	global $g_oris_club_key, $g_shortcut;
 	if (!empty($g_oris_club_key)) {
 		$service = OrisIntegrationServiceFactory::create();
