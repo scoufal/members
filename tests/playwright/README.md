@@ -39,6 +39,7 @@ These files are not part of the PHP runtime and must not be deployed to the prod
 - `MEMBERS_E2E_SUITE=no-oris` disables all ORIS configuration for application requests and makes mock `/API` return HTTP 503
 - `MEMBERS_E2E_SUITE=no-oris-key` leaves ORIS enabled but omits `$g_oris_club_key` for application requests
 - `MEMBERS_E2E_SUITE=no-race-services` disables transport and accommodation through the autotest request header, without changing ORIS or mock settings. It runs only the dedicated service-suppression spec (plus the shared user setup), covering single-day/multistage creation and editing, member registration, and race listings. Ordinary registration deadlines remain available. Fixtures own race IDs 24000–24004 from the 24000–25000 test range and suite-specific created race names, and clean up before and after each test. Run the command twice to check repeatability. This configuration and all fixtures are dev/test/CI-only and must not be deployed into the productive web root.
+- `race-deadline-workflow.spec.js` covers the full local-race deadline progression for members, small managers, managers, and registrars. It reserves race ID 24010, creates the race through the registrar UI, verifies inherited and explicit service deadlines across three registration terms, and cleans up its race and entries after each run.
 - The reusable login helper lives in `tests/playwright/components/login.js`
 - Shared auth constants live in `tests/playwright/constants/auth.js`
   - `DEFAULT_PASSWORD` = `54321`

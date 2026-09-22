@@ -38,7 +38,7 @@ check(RaceServiceValues($race, $entry, ['sedadel' => 4], true, $cutoff)['sedadel
 check(RaceHasLockedBooking($race, $entry, $cutoff), 'Locked booking cancellation');
 $html = RaceServiceIndicators($race, $cutoff-1);
 check(str_contains($html, '<s>D</s>') && !str_contains($html, '<s>U</s>'), 'Independent indicators');
-check(!str_contains(RaceServiceIndicators($race, $cutoff), '<s>D</s>'), 'Hide closed transport after registration closes');
+check(str_contains(RaceServiceIndicators($race, $cutoff), '<s>D</s>'), 'Show an independently closed transport deadline after registration closes');
 $race['transport'] = 2;
 check(RaceServiceValues($race, null, [], false, $cutoff)['transport'] === 1, 'Automatic booking ignores service deadline');
 check(RaceServiceValues($race, null, [], false, $cutoff-501)['transport'] === 1, 'Automatic open booking');
@@ -52,6 +52,12 @@ foreach ([null, 0, 1] as $legacyValue) {
 $race['transport'] = 3;
 $race['ubytovani_do'] = null; $race['transport_do'] = null;
 check(RaceServiceIndicators($race, $cutoff) === '', 'Equal deadlines should hide indicators');
+$zeroDeadlineRace = array_merge($race, ['transport_do' => 0, 'ubytovani_do' => 0]);
+check(RaceServiceDeadline($zeroDeadlineRace, 'transport') === $cutoff, 'Zero transport deadline must inherit');
+check(RaceServiceDeadline($zeroDeadlineRace, 'accommodation') === $cutoff, 'Zero accommodation deadline must inherit');
+check(RaceServiceIndicators($zeroDeadlineRace, $cutoff-1) === '', 'Unset zero service deadlines must hide indicators before registration closes');
+$explicitEqualRace = array_merge($race, ['transport_do' => $cutoff, 'ubytovani_do' => $cutoff]);
+check(RaceServiceIndicators($explicitEqualRace, $cutoff) === '', 'Explicit service deadlines equal to registration must render as inherited');
 $laterTermRace = array_merge($race, ['prihlasky' => 2, 'prihlasky2' => $cutoff+1000]);
 check(RaceServiceIndicators($laterTermRace, $cutoff-1) === '', 'Open inherited services need no indicators');
 $html = RaceServiceIndicators($laterTermRace, $cutoff);

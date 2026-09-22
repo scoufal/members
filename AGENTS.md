@@ -12,4 +12,5 @@ Read and follow the project guidance in `.agents/AGENTS.md`.
 ## Test race-ID reservations
 
 - The `no-race-services` fixtures reserve race IDs 24000–24004 from the 24000–25000 test range.
+- The `race-deadline-workflow` fixture reserves race ID 24010.
 - When another test suite reserves a new race-ID range, leave at least five unused race IDs after the highest ID in the preceding suite's reserved range; after the `no-race-services` range 24000–24004, another test suite's range must start at 24010 or later.

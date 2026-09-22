@@ -34,7 +34,7 @@ if ($input['action'] === 'reset') {
     $db_conn->query('INSERT INTO '.TBL_RACE.' ('.$fields.') VALUES ('.$values.')');
 } elseif ($input['action'] === 'patch') {
     foreach ($input['fields'] as $field=>$value) {
-        if (!in_array($field, ['prihlasky1','prihlasky2','prihlasky','transport_do','ubytovani_do','transport','ubytovani','ext_id'],true)) throw new RuntimeException('Invalid fixture field');
+        if (!in_array($field, ['prihlasky1','prihlasky2','prihlasky','transport_do','ubytovani_do','transport','ubytovani','ext_id','vedouci'],true)) throw new RuntimeException('Invalid fixture field');
         $sqlValue = $value===null ? 'NULL' : "'".$db_conn->real_escape_string((string)$value)."'";
         $db_conn->query('UPDATE '.TBL_RACE.' SET `'.$field.'`='.$sqlValue.' WHERE id='.$id);
     }

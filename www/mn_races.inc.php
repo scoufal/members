@@ -69,7 +69,8 @@ if ($num_rows > 0)
 		}
 		else
 		{
-			return "<A HREF=\"javascript:open_win('./race_reg_view.php?gr_id="._MANAGER_GROUP_ID_."&id=".$row->rec['id']."','')\"><span class=\"TextAlertExpLight\">Zobrazit</span></A>".$ucast;
+			return "<A HREF=\"javascript:open_win('./race_reg_view.php?gr_id="._MANAGER_GROUP_ID_."&id=".$row->rec['id']."','')\"><span class=\"TextAlertExpLight\">Zobrazit</span></A>".$ucast
+				.RaceServiceManagementLinks($row->rec, _MANAGER_GROUP_ID_);
 		}
  
 	})]);

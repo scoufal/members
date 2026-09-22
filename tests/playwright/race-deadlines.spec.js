@@ -34,6 +34,11 @@ for (const [index, timezoneId] of ['America/Los_Angeles', 'Asia/Tokyo'].entries(
       let stored = fixture(id);
       expect(stored.entry.kat).toBe('H21');
       expect(stored.entry.sedadel).toBe('3');
+      const openRegistrationList = await page.context().newPage();
+      await openRegistrationList.goto('./index.php?id=200&subid=2');
+      const openRegistrationRow = openRegistrationList.getByRole('link', { name:`PW exact deadlines ${id}`, exact:true }).locator('xpath=ancestor::tr[1]');
+      await expect(openRegistrationRow.getByRole('link', { name:/^[DU]$/ })).toHaveCount(0);
+      await openRegistrationList.close();
       // The browser still holds the open form, but the server cutoff has passed.
       fixture(id, 'patch', { prihlasky1:now()-1, transport_do:now()-1, ubytovani_do:now()+3600 });
       result = await postFormInSession(page, './us_race_regon_exc.php', { id_zav:id, id_us:member, kat:'H35', sedadel:4, ubytovani:1 });
@@ -82,6 +87,10 @@ for (const [index, timezoneId] of ['America/Los_Angeles', 'Asia/Tokyo'].entries(
       await expect(row.getByRole('link', { name:'U', exact:true })).toHaveCount(0);
       const apiBypass = await page.request.get(`./api_race_entry.php?id_race=${id}&id_user=${member}&action=entryByFin`);
       expect(apiBypass.status()).toBe(403);
+      fixture(id, 'patch', { vedouci:member });
+      const leaderAttendance = await page.request.get(`./api_race_entry.php?id_race=${id}&id_user=${member}&action=participate`);
+      expect(leaderAttendance.status()).toBe(200);
+      expect(await leaderAttendance.json()).toBe(1);
       const context = await browser.newContext();
       const staff = await context.newPage();
       try {
@@ -168,6 +177,41 @@ for (const [index, timezoneId] of ['America/Los_Angeles', 'Asia/Tokyo'].entries(
         const closed = await postFormInSession(memberPage, './us_race_regon_exc.php', { id_zav:id, id_us:member, novy:1, kat:'H35' });
         expect(closed.status).toBe(409);
       } finally { await memberContext.close(); }
+    });
+    test('manager edits preserve NULL values for closed services', async ({ page }) => {
+      const { member } = fixture(id, 'reset');
+      await loginAs(page, 'manager');
+      const created = await postFormInSession(page, `./race_regs_all_exc.php?gr_id=500&id=${id}`, {
+        [`kateg[${member}]`]: 'H21',
+        [`pozn[${member}]`]: '',
+        [`pozn2[${member}]`]: '',
+      });
+      expect(created.status, created.text).toBe(200);
+      expect(fixture(id).entry.transport).toBeNull();
+      expect(fixture(id).entry.ubytovani).toBeNull();
+
+      fixture(id, 'patch', { transport_do: now()-60, ubytovani_do: now()-60 });
+      await page.goto(`./race_regs_1.php?gr_id=500&id=${id}&show_ed=1`);
+      await page.locator('[name=user_id]').selectOption(String(member));
+      await expect(page.locator('[name=sedadel]')).toBeDisabled();
+      await expect(page.locator('[name=ubytovani]')).toBeDisabled();
+      await page.locator('[name=kateg]').fill('H35');
+      await page.locator('form[name=form1] input[type=submit]').click();
+      let entry = fixture(id).entry;
+      expect(entry.kat).toBe('H35');
+      expect(entry.transport).toBeNull();
+      expect(entry.ubytovani).toBeNull();
+
+      fixture(id, 'patch', { prihlasky1: now()-60, transport_do: now()+3600 });
+      const updated = await postFormInSession(page, `./race_regs_1_exc.php?gr_id=500&id=${id}&show_ed=1`, {
+        user_id: member, sedadel: 2,
+      });
+      expect(updated.status, updated.text).toBe(200);
+      entry = fixture(id).entry;
+      expect(entry.kat).toBe('H35');
+      expect(entry.transport).toBe('1');
+      expect(entry.sedadel).toBe('2');
+      expect(entry.ubytovani).toBeNull();
     });
     test('editing preserves exact cutoffs and overrides round trip', async ({ page }) => {
       fixture(id,'reset');

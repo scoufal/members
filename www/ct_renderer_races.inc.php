@@ -63,10 +63,14 @@ class ActivityRenderer implements IColumnContentRenderer {
         global $usr;
 
         $html = $this->renderRegistration($row, $options);
-        if (trim((string)($row->rec['kat'] ?? '')) !== '' && !($options['entry_lock'] ?? true)) {
+        $registrationTerm = RaceRegistrationTerm($row->rec);
+        $registrationEditable = $registrationTerm !== 0
+            && (empty($row->rec['prihlasky']) || (int)($row->rec['termin'] ?? 0) === $registrationTerm);
+        if (trim((string)($row->rec['kat'] ?? '')) !== ''
+            && !($options['entry_lock'] ?? true)
+            && !$registrationEditable) {
             $url = './us_race_regon.php?id_zav='.(int)$row->rec['id'].'&id_us='.(int)$usr->user_id;
             foreach (['transport' => 'D', 'accommodation' => 'U'] as $service => $letter) {
-                if ($service === 'transport' && RaceRegistrationTerm($row->rec) !== 0) continue;
                 if (RaceServiceOpen($row->rec, $service)) {
                     $html .= ' / <a href="'.htmlspecialchars($url, ENT_QUOTES).'" onclick="open_win(this.href, &quot;&quot;); return false;" class="Highlight">'.$letter.'</a>';
                 }
@@ -120,6 +124,19 @@ class ActivityRenderer implements IColumnContentRenderer {
 
         return '';
     }
+}
+
+function RaceServiceManagementLinks(array $race, int $groupId): string
+{
+    if (RaceRegistrationTerm($race) !== 0) return '';
+    $url = './race_regs_1.php?gr_id='.$groupId.'&id='.(int)$race['id'].'&show_ed=1';
+    $html = '';
+    foreach (['transport' => 'D', 'accommodation' => 'U'] as $service => $letter) {
+        if (RaceServiceOpen($race, $service)) {
+            $html .= '&nbsp;/&nbsp;<a href="'.htmlspecialchars($url, ENT_QUOTES).'" onclick="open_win(this.href, \'\'); return false;" class="Highlight">'.$letter.'</a>';
+        }
+    }
+    return $html;
 }
 
 class ParticipantsRenderer implements IColumnContentRenderer {

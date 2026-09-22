@@ -69,7 +69,8 @@ if ($num_rows > 0)
 		}
 		else
 		{
-			return "<A HREF=\"javascript:open_win('./race_reg_view.php?gr_id="._SMALL_MANAGER_GROUP_ID_."&id=".$row->rec['id']."&select=1','')\"><span class=\"TextAlertExpLight\">Zbr.čl.</span></A>&nbsp;/&nbsp;<A HREF=\"javascript:open_win('./race_reg_view.php?gr_id="._SMALL_MANAGER_GROUP_ID_."&id=".$row->rec['id']."','')\"><span class=\"TextAlertExpLight\">Zobrazit</span></A>";
+			return "<A HREF=\"javascript:open_win('./race_reg_view.php?gr_id="._SMALL_MANAGER_GROUP_ID_."&id=".$row->rec['id']."&select=1','')\"><span class=\"TextAlertExpLight\">Zbr.čl.</span></A>&nbsp;/&nbsp;<A HREF=\"javascript:open_win('./race_reg_view.php?gr_id="._SMALL_MANAGER_GROUP_ID_."&id=".$row->rec['id']."','')\"><span class=\"TextAlertExpLight\">Zobrazit</span></A>"
+				.RaceServiceManagementLinks($row->rec, _SMALL_MANAGER_GROUP_ID_);
 		}
 	})]);
 	$tbl_renderer->addColumns('prihlasky');

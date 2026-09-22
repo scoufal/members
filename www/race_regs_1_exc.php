@@ -52,6 +52,7 @@ $zaznam_z = mysqli_fetch_array($vysledek_z);
 
 $termin = raceterms::GetCurr4RegTerm($zaznam_z);
 $registrationOpen = RaceRegistrationTerm($zaznam_z) !== 0;
+$deadlineOverride = IsLoggedAdmin() || IsLoggedRegistrator();
 
 $is_registrator_on = IsCalledByRegistrator($gr_id);
 $is_termin_show_on = $is_registrator_on && ($zaznam_z['prihlasky'] > 1);
@@ -93,7 +94,33 @@ $etap_count = $is_multi_etapa ? (int)$zaznam_z['etap'] : 0;
 $selected_etapy = $is_multi_etapa ? array_values(array_intersect(range(1, $etap_count), array_map('intval', (array)$etapy))) : [];
 $etapy_sql = $is_multi_etapa ? "'".BuildEtapyString($selected_etapy)."'" : 'NULL';
 
-if ($is_multi_etapa && $kateg != '' && empty($selected_etapy)) {
+if (!$deadlineOverride) {
+	try {
+		$serviceValues = RaceServiceValues($zaznam_z, $zaznam ?: null, $_POST);
+		$transport = $serviceValues['transport'];
+		$sedadel = RaceServiceSqlValue($serviceValues['sedadel']);
+		$ubytovani = $serviceValues['ubytovani'];
+	} catch (InvalidArgumentException $e) {
+		http_response_code(409);
+		exit(htmlspecialchars($e->getMessage(), ENT_QUOTES));
+	}
+	if (!$registrationOpen) {
+		if (!$zaznam) {
+			http_response_code(409);
+			exit('Termín přihlášek již vypršel.');
+		}
+		$kateg = $zaznam['kat'];
+		$pozn = $zaznam['pozn'];
+		$pozn2 = $zaznam['pozn_in'];
+		$termin = $zaznam['termin'];
+		$etapy_sql = $zaznam['etapy'] === null ? 'NULL' : "'".correct_sql_string($zaznam['etapy'])."'";
+	}
+}
+
+$transport_sql = RaceServiceSqlValue($transport);
+$ubytovani_sql = RaceServiceSqlValue($ubytovani);
+
+if ($is_multi_etapa && ($deadlineOverride || $registrationOpen) && $kateg != '' && empty($selected_etapy)) {
 	$sync_error = 'Musíte vybrat alespoň jednu etapu.';
 }
 else if($termin != 0)
@@ -136,13 +163,13 @@ else if($termin != 0)
 			$termin=correct_sql_string($termin);
 			
 			$sync_status_update = "";
-			if ($has_ext_id && !$registrationOpen) {
+			if ($has_ext_id && !$registrationOpen && $deadlineOverride) {
 				$sync_status_update = ", sync_status='LOCAL_ONLY'";
 			} elseif ($sync_allowed && $zaznam['sync_status'] !== 'PENDING_CREATE') {
 				$sync_status_update = ", sync_status='PENDING_UPDATE'";
 			}
 			
-			$result=query_db("UPDATE ".TBL_ZAVXUS." SET kat='$kateg', pozn='$pozn', pozn_in='$pozn2', termin='$termin', transport = '$transport', sedadel = ".$sedadel.", ubytovani = '$ubytovani', etapy = ".$etapy_sql.$sync_status_update." WHERE id_zavod = '$id' AND id_user = '$user_id'")
+			$result=query_db("UPDATE ".TBL_ZAVXUS." SET kat='$kateg', pozn='$pozn', pozn_in='$pozn2', termin='$termin', transport = $transport_sql, sedadel = ".$sedadel.", ubytovani = $ubytovani_sql, etapy = ".$etapy_sql.$sync_status_update." WHERE id_zavod = '$id' AND id_user = '$user_id'")
 				or die("Chyba při provádění dotazu do databáze.");
 			if ($result == FALSE)
 				die ("Nepodařilo se změnit přihlášku člena.");
@@ -164,7 +191,7 @@ else if($termin != 0)
 			
 			$sync_status = $sync_allowed ? 'PENDING_CREATE' : 'LOCAL_ONLY';
 
-			$result=query_db("INSERT INTO ".TBL_ZAVXUS." (id_user, id_zavod, kat, pozn, pozn_in,termin,transport,sedadel,ubytovani,etapy,sync_status) VALUES ('$user_id','$id','$kateg', '$pozn', '$pozn2','$termin','$transport',".$sedadel.",'$ubytovani',".$etapy_sql.",'$sync_status')")
+			$result=query_db("INSERT INTO ".TBL_ZAVXUS." (id_user, id_zavod, kat, pozn, pozn_in,termin,transport,sedadel,ubytovani,etapy,sync_status) VALUES ('$user_id','$id','$kateg', '$pozn', '$pozn2','$termin',$transport_sql,".$sedadel.",$ubytovani_sql,".$etapy_sql.",'$sync_status')")
 				or die("Chyba při provádění dotazu do databáze.");
 			if ($result == FALSE)
 				die ("Nepodařilo se změnit přihlášku člena.");

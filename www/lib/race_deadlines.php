@@ -57,7 +57,7 @@ function RaceDeadlineDisplay(array $race, $value): string
 function RaceServiceDeadline(array $race, string $service): int
 {
     $field = $service === 'transport' ? 'transport_do' : 'ubytovani_do';
-    if (isset($race[$field])) return (int)$race[$field];
+    if (!empty($race[$field])) return (int)$race[$field];
     return RaceDeadlineTimestamp($race['prihlasky1'] ?? 0);
 }
 
@@ -108,7 +108,6 @@ function RaceServiceIndicators(array $race, ?int $now = null, ?string $editUrl =
         $deadline = RaceServiceDeadline($race, $service);
         if (!$enabled || empty($race[$setting]) || (int)$race[$setting] === 2) continue;
         $open = RaceServiceOpen($race, $service, $now);
-        if ($service === 'transport' && !$open && RaceRegistrationTerm($race, $now) === 0) continue;
         // An inherited first-term deadline can close before later registration terms.
         if ($deadline === $first && ($open || RaceRegistrationTerm($race, $now) === 0)) continue;
         $label = $open ? $letter : '<s>'.$letter.'</s>';
