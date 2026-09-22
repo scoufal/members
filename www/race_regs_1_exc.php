@@ -137,6 +137,10 @@ else if($termin != 0)
 		$previous_state = $zaznam;
 		if ($kateg == '')
 		{	// del
+			if (!$deadlineOverride && RaceHasLockedBooking($zaznam_z, $zaznam)) {
+				http_response_code(409);
+				exit('Odhlášení již není možné. Kontaktujte přihlašovatele.');
+			}
 			$is_pending_create = ($zaznam['sync_status'] === 'PENDING_CREATE');
 			
 			if ($sync_allowed && !$is_pending_create) {
