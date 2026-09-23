@@ -215,7 +215,7 @@ class OrisCZConnector implements ConnectorInterface {
 				'cancelled' => (!empty($raceData['Cancelled']) || !empty($raceData['Canceled']) || !empty($raceData['cancelled']) || !empty($raceData['canceled'])) ? 1 : 0,
 				'entry_start' => !empty($raceData['EntryStart']) ? $raceData['EntryStart'] : null,
 			]);
-		} catch (OrisException $e) {
+		} catch (OrisException | InvalidArgumentException $e) {
 			return null;
 		}
 	}

@@ -93,6 +93,39 @@ $merged['prihlasky1'] = $cutoff+10800;
 check(RaceServiceDeadline($merged, 'accommodation') === $cutoff+10800, 'Local edits override the imported default');
 check(RaceServiceDeadline($merged, 'transport') === $cutoff-100, 'Local edits preserve custom service overrides');
 echo "ORIS refresh mapping tests passed\n";
+
+// Invalid deadlines must fail only their race, allowing the batch to continue.
+$g_external_is_connector = 'OrisCZConnector';
+require_once __DIR__.'/../../www/connectors.php';
+$service = new class {
+    public array $event = [
+        'ID'=>1, 'Date'=>'2030-07-10', 'Name'=>'Deadline test', 'Place'=>'Prague',
+        'Sport'=>['ID'=>1], 'Level'=>['ID'=>4], 'Ranking'=>0, 'Stages'=>1,
+        'EntryDate1'=>'2030-07-05 17:23:45', 'EntryDate2'=>'', 'EntryDate3'=>'',
+        'EntryKoef2'=>0, 'EntryKoef3'=>0,
+    ];
+    public function getEvent($raceId) { return $this->event; }
+};
+$connectorClass = new ReflectionClass(OrisCZConnector::class);
+$connector = $connectorClass->newInstanceWithoutConstructor();
+$serviceProperty = $connectorClass->getProperty('service');
+$serviceProperty->setAccessible(true);
+$serviceProperty->setValue($connector, $service);
+foreach (['EntryDate1', 'EntryDate2', 'EntryDate3'] as $field) {
+    $original = $service->event[$field];
+    foreach (['garbage', '2030-02-31 17:23:45'] as $invalid) {
+        $service->event[$field] = $invalid;
+        check($connector->getRaceInfo('1') === null, 'Invalid '.$field.' must fail only this race');
+        $service->event[$field] = $original;
+        $nextRace = $connector->getRaceInfo('2');
+        check($nextRace instanceof RaceDTO && $nextRace->prihlasky === $cutoff,
+            'A valid race after an invalid deadline must still load with its exact deadline');
+        check($nextRace->prihlasky1 === 0 && $nextRace->prihlasky2 === 0,
+            'Empty optional ORIS deadlines must remain valid');
+    }
+}
+echo "ORIS connector deadline failure tests passed\n";
+
 $autumnFirst = ParseOrisDeadline('2030-10-27T02:30:00+02:00');
 $autumnSecond = ParseOrisDeadline('2030-10-27T02:30:00+01:00');
 foreach ([$autumnFirst, $autumnSecond] as $instant) {
