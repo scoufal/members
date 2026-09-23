@@ -70,12 +70,7 @@ $novy = $deadlineEntry ? 0 : 1;
 if ($kat != '')
 {
 
-	@$vysledek2=query_db("SELECT * FROM ".TBL_USER." where id=$id_us");
-	$entry_lock = false;
-	if ($zaznam2=mysqli_fetch_array($vysledek2))
-	{
-		$entry_lock = ($zaznam2['entry_locked'] != 0);
-	}
+	$entry_lock = ($deadlineUser['entry_locked'] != 0);
 
 	if (!$entry_lock)
 	{
@@ -132,8 +127,8 @@ if ($kat != '')
 			}
 			else
 			{	// update
-				$vysledek=query_db("SELECT * FROM ".TBL_ZAVXUS." WHERE id='".$id_z."'");
-				if ($vysledek != FALSE && ($zaznam = mysqli_fetch_array($vysledek)) != FALSE )
+				$zaznam = $deadlineEntry;
+				if ($zaznam)
 				{
 					$previous_state = $zaznam;
 					$sync_status_update = ($has_ext_id && $zaznam['sync_status'] !== 'PENDING_CREATE') ? ", sync_status='PENDING_UPDATE'" : "";
