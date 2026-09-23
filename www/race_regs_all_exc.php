@@ -32,7 +32,7 @@ db_Connect();
 
 $sub_query = (IsLoggedRegistrator() || IsLoggedManager()) ? '' : ' AND '.TBL_USER.'.chief_id = '.$usr->user_id.' OR '.TBL_USER.'.id = '.$usr->user_id;
 
-$query = 'SELECT '.TBL_USER.'.id, kat, termin, sync_status FROM '.TBL_USER.' LEFT JOIN '.TBL_ZAVXUS.' ON '.TBL_USER.'.id = '.TBL_ZAVXUS.'.id_user AND '.TBL_ZAVXUS.'.id_zavod='.$id.' WHERE '.TBL_USER.'.hidden = 0'.$sub_query;
+$query = 'SELECT '.TBL_USER.'.id AS user_id, '.TBL_ZAVXUS.'.id AS registration_id, '.TBL_ZAVXUS.'.* FROM '.TBL_USER.' LEFT JOIN '.TBL_ZAVXUS.' ON '.TBL_USER.'.id = '.TBL_ZAVXUS.'.id_user AND '.TBL_ZAVXUS.'.id_zavod='.$id.' WHERE '.TBL_USER.'.hidden = 0'.$sub_query;
 
 @$vysledek=query_db($query);
 
@@ -58,9 +58,9 @@ $local_only_changes = false;
 $is_multi_etapa = IsMultiEtapaRace($zaznam_z);
 $etap_count = $is_multi_etapa ? (int)$zaznam_z['etap'] : 0;
 
-while ($zaznamZ=mysqli_fetch_array($vysledek))
+while ($zaznamZ=mysqli_fetch_assoc($vysledek))
 {
-	$user=$zaznamZ["id"];
+	$user=$zaznamZ['user_id'];
 	if (IsSet($kateg[$user]))
 	{
 		$kat = correct_sql_string($kateg[$user]);
@@ -85,9 +85,12 @@ while ($zaznamZ=mysqli_fetch_array($vysledek))
 		$ubyt = ($is_spol_ubyt_on && IsSet($ubytovani[$user])) || (int)$zaznam_z['ubytovani'] === 2 ? 1 : 'NULL';
 		if ((int)$zaznam_z['transport'] === 2) $trans = 1;
 
-		$q_zavxus = query_db("SELECT * FROM ".TBL_ZAVXUS." WHERE id_zavod='$id' AND id_user='$user'");
-		$row_zx = mysqli_fetch_assoc($q_zavxus);
-		$zx_id = $row_zx['id'] ?? 0;
+		$zx_id = $zaznamZ['registration_id'] ?? 0;
+		$row_zx = null;
+		if ($zaznamZ['registration_id'] !== null) {
+			$row_zx = $zaznamZ;
+			unset($row_zx['user_id'], $row_zx['registration_id']);
+		}
 		$termClosedForUser = !$deadlineOverride && !$registrationOpen;
 		// Only fall back to the deadline-aware helper for a field once its own service
 		// deadline has actually passed; while everything is still open the existing
@@ -134,13 +137,6 @@ while ($zaznamZ=mysqli_fetch_array($vysledek))
 		
 		if ($zaznamZ['kat'] != NULL)
 		{	// jiz prihlasen
-			// We need the internal ID of the row from TBL_ZAVXUS, but it's not selected. 
-			// We'll have to get it, or select it initially. Let's select it initially. Wait, the query is JOINed, but id from ZAVXUS isn't selected!
-			// Actually, let's fetch the real ID since we need it.
-			$q_zavxus = query_db("SELECT * FROM ".TBL_ZAVXUS." WHERE id_zavod='$id' AND id_user='$user'");
-			$row_zx = mysqli_fetch_assoc($q_zavxus);
-			$zx_id = $row_zx['id'] ?? 0;
-
 			if ($termClosedForUser) {
 				$etapy_sql = !empty($row_zx['etapy']) ? "'".correct_sql_string($row_zx['etapy'])."'" : 'NULL';
 			} elseif ($is_multi_etapa) {
