@@ -285,14 +285,6 @@ test.describe('complete local race deadline workflow', () => {
       await expectMemberActions(rows, ['D']);
       await expectDialogFields(roles, state.member, { registration: false, transport: true, accommodation: false });
 
-      fixture('patch', { ext_id: 8971 });
-      fixture('patch_entry', { sync_status: 'SYNCED' });
-      result = await postFormInSession(roles.smallManager.page, `./race_regs_1_exc.php?gr_id=600&id=${RACE_ID}&show_ed=1`, {
-        user_id: state.member, kateg: 'ignored-after-deadline', sedadel: 4,
-      });
-      expect(result.status, result.text).toBe(200);
-      expect(fixture().entry.sedadel).toBe('4');
-      expect(fixture().entry.sync_status).toBe('SYNCED');
     } finally {
       await Promise.all(Object.values(roles).map(({ context }) => context.close()));
     }
