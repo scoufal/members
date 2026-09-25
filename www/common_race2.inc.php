@@ -53,6 +53,8 @@ public static function GetActiveRegDateArr(&$zaznam)
 //	0. - reg. date
 //	1. - termin
 {
+	if (!empty($zaznam['cancelled']))
+		return array(0,0);
 	if ($zaznam['prihlasky'] == 0)
 		return array(0,0);
 	if ($zaznam['prihlasky'] == 1 || GetTimeToReg($zaznam['prihlasky1']) != -1 )

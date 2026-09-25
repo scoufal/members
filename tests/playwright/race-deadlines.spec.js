@@ -213,6 +213,54 @@ for (const [index, timezoneId] of ['America/Los_Angeles', 'Asia/Tokyo'].entries(
       expect(entry.sedadel).toBe('2');
       expect(entry.ubytovani).toBeNull();
     });
+    test('bulk edit screen preserves registration content once the deadline closes', async ({ page, browser }) => {
+      let { member } = fixture(id, 'reset');
+      fixture(id, 'patch', { prihlasky1: now()-60 });
+      await loginAs(page, 'manager');
+      const blockedNew = await postFormInSession(page, `./race_regs_all_exc.php?gr_id=500&id=${id}`, {
+        [`kateg[${member}]`]: 'H21',
+        [`pozn[${member}]`]: '',
+        [`pozn2[${member}]`]: '',
+      });
+      expect(blockedNew.status, blockedNew.text).toBe(409);
+      expect(fixture(id).entry).toBeNull();
+
+      ({ member } = fixture(id, 'reset'));
+      const created = await postFormInSession(page, `./race_regs_all_exc.php?gr_id=500&id=${id}`, {
+        [`kateg[${member}]`]: 'H21',
+        [`pozn[${member}]`]: 'before deadline',
+        [`pozn2[${member}]`]: '',
+      });
+      expect(created.status, created.text).toBe(200);
+      expect(fixture(id).entry.kat).toBe('H21');
+
+      fixture(id, 'patch', { prihlasky1: now()-60 });
+      const attempted = await postFormInSession(page, `./race_regs_all_exc.php?gr_id=500&id=${id}`, {
+        [`kateg[${member}]`]: 'H35',
+        [`pozn[${member}]`]: 'after deadline',
+        [`pozn2[${member}]`]: '',
+      });
+      expect(attempted.status, attempted.text).toBe(200);
+      let entry = fixture(id).entry;
+      expect(entry.kat).toBe('H21');
+      expect(entry.pozn).toBe('before deadline');
+
+      // Registrator keeps full override through the same bulk screen.
+      const registrarContext = await browser.newContext();
+      const registrarPage = await registrarContext.newPage();
+      try {
+        await loginAs(registrarPage, 'registrar');
+        const overridden = await postFormInSession(registrarPage, `./race_regs_all_exc.php?gr_id=400&id=${id}`, {
+          [`kateg[${member}]`]: 'H35',
+          [`pozn[${member}]`]: 'registrar override',
+          [`pozn2[${member}]`]: '',
+        });
+        expect(overridden.status, overridden.text).toBe(200);
+        entry = fixture(id).entry;
+        expect(entry.kat).toBe('H35');
+        expect(entry.pozn).toBe('registrar override');
+      } finally { await registrarContext.close(); }
+    });
     test('editing preserves exact cutoffs and overrides round trip', async ({ page }) => {
       fixture(id,'reset');
       const deadline = now()+86400;

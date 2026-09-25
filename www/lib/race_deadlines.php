@@ -2,7 +2,8 @@
 // All stored deadlines are absolute timestamps.
 function RaceDeadlineTimestamp($value): int
 {
-    return empty($value) ? 0 : (int)$value;
+    if (empty($value)) return 0;
+    return (int)$value;
 }
 
 function ParseOrisDeadline($value): int
