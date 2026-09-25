@@ -22,9 +22,6 @@ foreach (['31.02.2030 10:00:00', '31.03.2030 02:30:00', 'garbage'] as $invalid) 
     catch (InvalidArgumentException $expected) {}
 }
 check(RaceDeadlineTimestamp($cutoff) === $cutoff, 'Stored timestamps must be used without adjustment');
-$legacyMidnight = (new DateTimeImmutable('2030-07-05 00:00:00', new DateTimeZone('Europe/Prague')))->getTimestamp();
-$legacyEndOfDay = (new DateTimeImmutable('2030-07-05 23:59:59', new DateTimeZone('Europe/Prague')))->getTimestamp();
-check(RaceDeadlineTimestamp($legacyMidnight) === $legacyEndOfDay, 'Legacy midnight-stored deadlines must still mean end of day');
 $race['prihlasky1'] = $cutoff+500;
 check(RaceServiceDeadline($race, 'transport') === $cutoff+500, 'Local first deadline inheritance');
 $race['prihlasky1'] = $cutoff;

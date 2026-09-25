@@ -3,16 +3,7 @@
 function RaceDeadlineTimestamp($value): int
 {
     if (empty($value)) return 0;
-    $value = (int)$value;
-    // Legacy deadlines were stored via mktime(0,0,0,...) (Europe/Prague local midnight)
-    // and always meant "end of that day". Rows never re-saved since exact deadlines were
-    // introduced still hold that convention, so keep honoring it here instead of closing
-    // registration/services a day early for every un-migrated race.
-    $prague = (new DateTimeImmutable('@'.$value))->setTimezone(new DateTimeZone('Europe/Prague'));
-    if ($prague->format('H:i:s') === '00:00:00') {
-        return $prague->setTime(23, 59, 59)->getTimestamp();
-    }
-    return $value;
+    return (int)$value;
 }
 
 function ParseOrisDeadline($value): int
