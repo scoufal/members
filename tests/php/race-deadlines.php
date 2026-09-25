@@ -72,8 +72,11 @@ echo "Deadline tests passed\n";
 define('__HIDE_TEST__', true);
 require_once __DIR__.'/../../www/common.inc.php';
 require_once __DIR__.'/../../www/url.inc.php';
+require_once __DIR__.'/../../www/common_race2.inc.php';
 require_once __DIR__.'/../../www/lib/OrisDTOs.php';
 require_once __DIR__.'/../../www/lib/race_import.php';
+$cancelledRace = ['prihlasky'=>1, 'prihlasky1'=>$cutoff+86400, 'cancelled'=>1];
+check(raceterms::GetActiveRegDateArr($cancelledRace) === [0, 0], 'Cancelled race has no active registration term in list views');
 $g_modify_flag = [['id'=>1], ['id'=>2], ['id'=>4]];
 $existing = ['datum'=>0, 'datum2'=>0, 'prihlasky'=>5,
     'prihlasky1'=>$cutoff, 'prihlasky2'=>$cutoff, 'prihlasky3'=>$cutoff, 'prihlasky4'=>$cutoff, 'prihlasky5'=>$cutoff,
