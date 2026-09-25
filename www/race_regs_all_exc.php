@@ -117,9 +117,10 @@ while ($zaznamZ=mysqli_fetch_assoc($vysledek))
 			}
 			if ($termClosedForUser) {
 				if ($row_zx) {
-					$kat = correct_sql_string($row_zx['kat']);
-					$poz = correct_sql_string($row_zx['pozn']);
-					$poz2 = correct_sql_string($row_zx['pozn_in']);
+					// Escape these preserved values once, in the update below.
+					$kat = $row_zx['kat'];
+					$poz = $row_zx['pozn'];
+					$poz2 = $row_zx['pozn_in'];
 					$cterm = (int)$row_zx['termin'];
 				} elseif ($kat !== '') {
 					http_response_code(409);
@@ -179,7 +180,7 @@ while ($zaznamZ=mysqli_fetch_assoc($vysledek))
 				$cterm=correct_sql_string($cterm);
 			
 				$sync_status_update = "";
-				if ($has_ext_id && !$registrationOpen) {
+				if ($has_ext_id && !$registrationOpen && $deadlineOverride) {
 					$sync_status_update = ", sync_status='LOCAL_ONLY'";
 				} elseif ($sync_allowed && $row_zx && $row_zx['sync_status'] !== 'PENDING_CREATE') {
 					$sync_status_update = ", sync_status='PENDING_UPDATE'";

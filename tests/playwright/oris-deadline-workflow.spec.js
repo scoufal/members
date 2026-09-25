@@ -12,11 +12,13 @@ function fixture(action = 'read', fields) {
 test.describe('ORIS-linked deadline workflow', () => {
   test.afterEach(() => fixture('cleanup'));
 
-  test('small manager keeps an expired ORIS-linked entry local', async ({ page, browser }) => {
+  test('manager service edits preserve expired ORIS-linked registration details and sync state', async ({ page, browser }) => {
     const state = fixture('reset');
+    const notes = { pozn: "O'Brien", pozn2: "Member's note: C:\\trips" };
     await loginAs(page, 'member');
     let result = await postFormInSession(page, './us_race_regon_exc.php', {
       id_zav: state.id, id_us: state.member, novy: 1, kat: 'H35', sedadel: 2, ubytovani: 1,
+      ...notes,
     });
     expect(result.status, result.text).toBe(200);
 
@@ -32,5 +34,28 @@ test.describe('ORIS-linked deadline workflow', () => {
     expect(result.status, result.text).toBe(200);
     expect(fixture().entry.sedadel).toBe('4');
     expect(fixture().entry.sync_status).toBe('SYNCED');
+
+    const bulkContext = await browser.newContext();
+    try {
+      const bulkPage = await bulkContext.newPage();
+      await loginAs(bulkPage, 'manager');
+      // Repeated service-only saves must not accumulate escaping or mark the
+      // unchanged ORIS registration as local-only.
+      for (const seats of [5, 6]) {
+        result = await postFormInSession(bulkPage, `./race_regs_all_exc.php?gr_id=500&id=${state.id}`, {
+          [`kateg[${state.member}]`]: 'ignored-after-deadline',
+          [`pozn[${state.member}]`]: 'ignored',
+          [`pozn2[${state.member}]`]: 'ignored',
+          [`sedadel[${state.member}]`]: seats,
+        });
+        expect(result.status, result.text).toBe(200);
+        expect(fixture().entry).toMatchObject({
+          kat: 'H35', pozn: notes.pozn, pozn_in: notes.pozn2,
+          termin: '1', ubytovani: '1', sedadel: String(seats), sync_status: 'SYNCED',
+        });
+      }
+    } finally {
+      await bulkContext.close();
+    }
   });
 });
